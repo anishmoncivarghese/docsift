@@ -21,7 +21,10 @@ class MarkItDownEngine(ConversionEngine):
         try:
             result = MarkItDown().convert(str(path))
         except Exception as exc:
-            raise ConversionFailedError(f"markitdown failed on '{path.name}': {exc}") from exc
+            # Exception text can quote document content; expose only the type name.
+            raise ConversionFailedError(
+                f"markitdown failed on '{path.name}': {type(exc).__name__}"
+            ) from exc
         return EngineOutput(
             markdown=result.text_content or "",
             title=getattr(result, "title", None),
