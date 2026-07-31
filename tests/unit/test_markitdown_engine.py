@@ -32,3 +32,22 @@ def test_conversion_failure_wraps_without_raw_exception_text(tmp_path):
     message = str(excinfo.value)
     assert "broken.docx" in message
     assert "secret document content" not in message
+
+
+def test_wrapper_strips_injected_exception_text(monkeypatch, tmp_path):
+    import markitdown
+
+    from docsift.core.exceptions import ConversionFailedError
+
+    class ExplodingMarkItDown:
+        def convert(self, path):
+            raise ValueError("secret document content")
+
+    monkeypatch.setattr(markitdown, "MarkItDown", ExplodingMarkItDown)
+    bad = tmp_path / "x.html"
+    bad.write_text("<html></html>", encoding="utf-8")
+    with pytest.raises(ConversionFailedError) as excinfo:
+        MarkItDownEngine().convert(bad)
+    message = str(excinfo.value)
+    assert "secret document content" not in message
+    assert "ValueError" in message
