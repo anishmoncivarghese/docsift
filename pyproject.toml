@@ -9,6 +9,7 @@ authors = [{ name = "Anish Monci Varghese" }]
 dependencies = [
   "typer>=0.12",
   "pydantic>=2.7",
+  "tiktoken>=0.8",
 ]
 
 [project.optional-dependencies]
