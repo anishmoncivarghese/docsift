@@ -18,6 +18,8 @@ Status: pre-release (v0.1 in development). See `docs/specs/v0.1-spec.md`.
     uv run docsift convert report.pdf --engine markitdown
     uv run docsift --version
 
+Output defaults to `./output/` and can be changed with `--output DIR`.
+
 ## License
 
 MIT

@@ -59,3 +59,19 @@ def test_convert_unsupported_file_exits_nonzero(tmp_path):
     result = runner.invoke(app, ["convert", str(source)])
     assert result.exit_code == 1
     assert "unsupported file type" in result.output
+
+
+def test_unexpected_error_prints_type_only(monkeypatch, tmp_path):
+    import docsift.services.conversion_service as svc
+
+    def explode(path, engine="auto", output_dir=None):
+        raise PermissionError("secret path details")
+
+    monkeypatch.setattr(svc, "convert_document", explode)
+    source = tmp_path / "note.txt"
+    source.write_text("hello", encoding="utf-8")
+    result = runner.invoke(app, ["convert", str(source)])
+    assert result.exit_code == 1
+    assert "unexpected failure: PermissionError" in result.output
+    assert "secret path details" not in result.output
+    assert "Traceback" not in result.output

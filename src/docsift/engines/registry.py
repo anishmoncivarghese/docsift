@@ -1,3 +1,7 @@
+"""Lazy engine registry. Built-in engines are referenced by import-path strings so that
+neither engine package is imported until get_engine() is called with its name;
+register_engine() overrides built-ins (used by tests and future plugins)."""
+
 import importlib
 
 from docsift.core.exceptions import EngineNotAvailableError

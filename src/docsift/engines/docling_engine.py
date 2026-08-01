@@ -28,9 +28,14 @@ class DoclingEngine(ConversionEngine):
                 f"docling failed on '{path.name}': {type(exc).__name__}"
             ) from exc
         page_count = len(document.pages) if getattr(document, "pages", None) else None
+        title = None
+        for item in getattr(document, "texts", []):
+            if type(item).__name__ == "TitleItem":
+                title = getattr(item, "text", None)
+                break
         return EngineOutput(
             markdown=markdown,
-            title=getattr(document, "name", None),
+            title=title,
             page_count=page_count,
             engine_version=metadata.version("docling"),
         )

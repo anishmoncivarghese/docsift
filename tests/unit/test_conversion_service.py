@@ -9,6 +9,17 @@ from docsift.engines.registry import register_engine, unregister_engine
 from docsift.services.conversion_service import convert_document
 
 
+class EmptyEngine(ConversionEngine):
+    name = "markitdown"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    def convert(self, path: Path) -> EngineOutput:
+        return EngineOutput(markdown="", engine_version="9.9.9")
+
+
 class StubEngine(ConversionEngine):
     name = "markitdown"  # registered over the builtin for these tests
 
@@ -110,3 +121,19 @@ def test_docsift_errors_pass_through_unwrapped(text_file):
             convert_document(text_file)
     finally:
         unregister_engine("markitdown")
+
+
+def test_explicit_engine_does_not_bypass_extension_validation(tmp_path):
+    bad = tmp_path / "movie.mp4"
+    bad.write_text("x", encoding="utf-8")
+    with pytest.raises(UnsupportedFileError, match="unsupported file type"):
+        convert_document(bad, engine="markitdown")
+
+
+def test_empty_conversion_emits_warning(text_file):
+    register_engine("markitdown", EmptyEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+    assert any(w.code == "empty_output" for w in result.warnings)

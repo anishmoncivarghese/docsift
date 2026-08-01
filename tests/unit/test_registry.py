@@ -52,3 +52,12 @@ def test_unavailable_engine_raises_with_install_hint():
             get_engine("ghost")
     finally:
         unregister_engine("ghost")
+
+
+def test_builtin_paths_resolve():
+    from docsift.engines.docling_engine import DoclingEngine
+    from docsift.engines.markitdown_engine import MarkItDownEngine
+    from docsift.engines.registry import _resolve
+
+    assert _resolve("docling") is DoclingEngine
+    assert _resolve("markitdown") is MarkItDownEngine

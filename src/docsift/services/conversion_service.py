@@ -9,11 +9,12 @@ from docsift.core.models import (
     ConversionMetadata,
     ConversionMetrics,
     ConversionResult,
+    ConversionWarning,
     DocumentContent,
     SourceMetadata,
 )
 from docsift.engines.registry import get_engine
-from docsift.engines.router import select_engine_name
+from docsift.engines.router import SUPPORTED_SUFFIXES, select_engine_name
 from docsift.processing.token_estimator import estimate_tokens
 
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
@@ -36,6 +37,11 @@ def _validate(path: Path) -> int:
     if size > MAX_FILE_SIZE_BYTES:
         raise UnsupportedFileError(
             f"file is {size} bytes; maximum is {MAX_FILE_SIZE_BYTES} (50 MB)"
+        )
+    suffix = path.suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise UnsupportedFileError(
+            f"unsupported file type '{suffix}'; supported: {sorted(SUPPORTED_SUFFIXES)}"
         )
     return size
 
@@ -62,6 +68,14 @@ def convert_document(
     completed = datetime.now(UTC)
 
     markdown = output.markdown
+    warnings = list(output.warnings)
+    if not markdown.strip():
+        warnings.append(
+            ConversionWarning(
+                code="empty_output",
+                message=f"{engine_name} produced no Markdown for '{path.name}'",
+            )
+        )
     result = ConversionResult(
         document_id=f"doc_{sha[:12]}",
         source=SourceMetadata(
@@ -90,7 +104,7 @@ def convert_document(
             words=len(markdown.split()),
             estimated_tokens=estimate_tokens(markdown),
         ),
-        warnings=list(output.warnings),
+        warnings=warnings,
     )
 
     if output_dir is not None:

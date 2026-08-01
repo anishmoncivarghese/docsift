@@ -12,7 +12,22 @@ def test_pdf_routes_to_docling():
     assert "PDF" in reason
 
 
-@pytest.mark.parametrize("name", ["a.docx", "b.pptx", "c.xlsx", "d.html", "e.csv", "f.epub"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "a.docx",
+        "b.pptx",
+        "c.xlsx",
+        "d.html",
+        "e.csv",
+        "f.epub",
+        "g.zip",
+        "h.json",
+        "i.xml",
+        "j.txt",
+        "k.md",
+    ],
+)
 def test_office_and_web_formats_route_to_markitdown(name):
     engine, _ = select_engine_name(Path(name))
     assert engine == "markitdown"

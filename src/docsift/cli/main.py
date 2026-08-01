@@ -7,6 +7,7 @@ from docsift import __version__
 app = typer.Typer(
     help="DocSift — convert documents once, give agents only what they need.",
     no_args_is_help=True,
+    pretty_exceptions_show_locals=False,
 )
 
 
@@ -43,6 +44,11 @@ def convert(
         result = convert_document(path, engine=engine, output_dir=output)
     except DocSiftError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.secho(
+            f"error: unexpected failure: {type(exc).__name__}", fg=typer.colors.RED, err=True
+        )
         raise typer.Exit(code=1) from exc
     typer.echo(f"document_id: {result.document_id}")
     typer.echo(f"engine: {result.conversion.engine} ({result.conversion.selection_reason})")
