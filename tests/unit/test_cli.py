@@ -134,7 +134,7 @@ def test_compare_exits_one_when_all_engines_fail(tmp_path):
     source = tmp_path / "note.txt"
     source.write_text("hello", encoding="utf-8")
     try:
-        result = runner.invoke(app, ["compare", str(source)])
+        result = runner.invoke(app, ["compare", str(source), "--output", str(tmp_path / "cmp")])
     finally:
         unregister_engine("markitdown")
         unregister_engine("docling")
