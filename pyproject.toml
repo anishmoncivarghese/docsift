@@ -40,6 +40,11 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer's documented pattern: typer.Argument()/typer.Option() as parameter
+# defaults are how the CLI declares its options; they aren't mutable-default bugs.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["integration: needs real conversion engines (may download models)"]
