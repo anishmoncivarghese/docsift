@@ -45,3 +45,9 @@ def test_result_json_round_trip():
     result = _result()
     restored = ConversionResult.model_validate_json(result.model_dump_json())
     assert restored == result
+
+
+def test_result_carries_schema_version():
+    result = _result()
+    assert result.schema_version == "1"
+    assert '"schema_version":"1"' in result.model_dump_json().replace(" ", "")

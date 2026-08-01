@@ -60,6 +60,7 @@ class EngineOutput(BaseModel):
 
 
 class ConversionResult(BaseModel):
+    schema_version: str = "1"
     document_id: str
     source: SourceMetadata
     conversion: ConversionMetadata

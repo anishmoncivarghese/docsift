@@ -47,3 +47,16 @@ def test_unsupported_suffix_raises():
 def test_unknown_engine_choice_raises():
     with pytest.raises(EngineNotAvailableError, match="unknown engine"):
         select_engine_name(Path("report.pdf"), requested="pandoc")
+
+
+def test_registered_engine_becomes_valid_choice():
+    from docsift.engines.registry import register_engine, unregister_engine
+    from tests.unit.test_registry import FakeEngine
+
+    register_engine("fake", FakeEngine)
+    try:
+        engine, reason = select_engine_name(Path("report.pdf"), requested="fake")
+    finally:
+        unregister_engine("fake")
+    assert engine == "fake"
+    assert reason == "explicit user selection"
