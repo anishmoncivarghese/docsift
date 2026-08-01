@@ -809,7 +809,10 @@ class MarkItDownEngine(ConversionEngine):
         try:
             result = MarkItDown().convert(str(path))
         except Exception as exc:
-            raise ConversionFailedError(f"markitdown failed on '{path.name}': {exc}") from exc
+            # Exception text can quote document content; expose only the type name.
+            raise ConversionFailedError(
+                f"markitdown failed on '{path.name}': {type(exc).__name__}"
+            ) from exc
         return EngineOutput(
             markdown=result.text_content or "",
             title=getattr(result, "title", None),
@@ -938,7 +941,10 @@ class DoclingEngine(ConversionEngine):
             document = result.document
             markdown = document.export_to_markdown()
         except Exception as exc:
-            raise ConversionFailedError(f"docling failed on '{path.name}': {exc}") from exc
+            # Exception text can quote document content; expose only the type name.
+            raise ConversionFailedError(
+                f"docling failed on '{path.name}': {type(exc).__name__}"
+            ) from exc
         page_count = len(document.pages) if getattr(document, "pages", None) else None
         return EngineOutput(
             markdown=markdown,
@@ -1115,7 +1121,10 @@ def convert_document(
     except DocSiftError:
         raise
     except Exception as exc:  # engine bugs must surface as structured errors
-        raise ConversionFailedError(f"{engine_name} failed on '{path.name}': {exc}") from exc
+        # Exception text can quote document content; expose only the type name.
+        raise ConversionFailedError(
+            f"{engine_name} failed on '{path.name}': {type(exc).__name__}"
+        ) from exc
     completed = datetime.now(UTC)
 
     markdown = output.markdown
