@@ -16,14 +16,14 @@ class GoodEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options=None) -> EngineOutput:
         return EngineOutput(markdown="# Title\n\n|a|b|\n|-|-|\n", engine_version="1.0.0")
 
 
 class BadEngine(GoodEngine):
     name = "docling"
 
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options=None) -> EngineOutput:
         raise ConversionFailedError("docling failed on 'note.txt': BoomError")
 
 
@@ -74,7 +74,7 @@ def test_invalid_input_raises_before_any_engine_runs(engines, tmp_path):
 
 def test_comparison_artifacts_never_contain_document_content(engines, tmp_path):
     class SecretEngine(GoodEngine):
-        def convert(self, path: Path) -> EngineOutput:
+        def convert(self, path: Path, options=None) -> EngineOutput:
             return EngineOutput(markdown="# CONFIDENTIAL-XYZ body", engine_version="1.0.0")
 
     register_engine("markitdown", SecretEngine)

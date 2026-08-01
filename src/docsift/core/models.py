@@ -38,6 +38,8 @@ class ConversionMetrics(BaseModel):
     characters: int
     words: int
     estimated_tokens: int
+    raw_estimated_tokens: int | None = None
+    duplicate_lines_removed: int = 0
 
 
 class Chunk(BaseModel):
@@ -57,6 +59,7 @@ class EngineOutput(BaseModel):
     ocr_used: bool = False
     engine_version: str
     warnings: list[ConversionWarning] = Field(default_factory=list)
+    chunks: list[Chunk] | None = None
 
 
 class ConversionResult(BaseModel):

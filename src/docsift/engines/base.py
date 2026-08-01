@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from docsift.core.models import EngineOutput
+from docsift.core.options import ConversionOptions
 
 
 class ConversionEngine(ABC):
@@ -15,6 +16,11 @@ class ConversionEngine(ABC):
     def is_available(cls) -> bool:
         """True when the engine's optional dependency is importable."""
 
+    @classmethod
+    def version(cls) -> str:
+        """Installed engine package version; 'unknown' when unavailable."""
+        return "unknown"
+
     @abstractmethod
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options: ConversionOptions | None = None) -> EngineOutput:
         """Convert the file at `path`. Raises on failure; never returns None."""

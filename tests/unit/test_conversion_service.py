@@ -16,7 +16,7 @@ class EmptyEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options=None) -> EngineOutput:
         return EngineOutput(markdown="", engine_version="9.9.9")
 
 
@@ -27,7 +27,7 @@ class StubEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options=None) -> EngineOutput:
         return EngineOutput(markdown="# Stubbed\n\nHello.", engine_version="9.9.9")
 
 
@@ -38,7 +38,7 @@ class ExplodingEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options=None) -> EngineOutput:
         raise ValueError("secret document content")
 
 
@@ -49,7 +49,7 @@ class StructuredFailureEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path) -> EngineOutput:
+    def convert(self, path: Path, options=None) -> EngineOutput:
         raise ConversionFailedError("engine says no")
 
 

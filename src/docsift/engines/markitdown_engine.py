@@ -3,6 +3,7 @@ from pathlib import Path
 
 from docsift.core.exceptions import ConversionFailedError
 from docsift.core.models import EngineOutput
+from docsift.core.options import ConversionOptions
 from docsift.engines.base import ConversionEngine
 
 
@@ -15,7 +16,13 @@ class MarkItDownEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return util.find_spec("markitdown") is not None
 
-    def convert(self, path: Path) -> EngineOutput:
+    @classmethod
+    def version(cls) -> str:
+        if not cls.is_available():
+            return "unknown"
+        return metadata.version("markitdown")
+
+    def convert(self, path: Path, options: ConversionOptions | None = None) -> EngineOutput:
         from markitdown import MarkItDown
 
         try:
