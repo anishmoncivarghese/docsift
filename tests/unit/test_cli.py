@@ -9,7 +9,7 @@ from docsift.core.models import EngineOutput
 from docsift.engines.base import ConversionEngine
 from docsift.engines.registry import register_engine, unregister_engine
 
-runner = CliRunner()
+runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 
 class StubEngine(ConversionEngine):
