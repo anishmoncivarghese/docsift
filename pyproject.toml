@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-markitdown = ["markitdown[docx,pptx,xlsx]>=0.1.1"]
+markitdown = ["markitdown[docx,pptx,xlsx,pdf]>=0.1.1"]
 docling = ["docling>=2.0"]
 all = ["docsift[markitdown]", "docsift[docling]"]
 
