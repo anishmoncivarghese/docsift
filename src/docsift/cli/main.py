@@ -55,3 +55,37 @@ def convert(
     typer.echo(f"estimated_tokens: {result.metrics.estimated_tokens}")
     typer.echo(f"markdown: {output / (path.stem + '.md')}")
     typer.echo(f"result_json: {output / (path.stem + '.docsift.json')}")
+
+
+@app.command()
+def compare(
+    path: Path = typer.Argument(..., help="File to run through every engine."),
+    output: Path = typer.Option(Path("output"), help="Directory for per-engine and report files."),
+) -> None:
+    """Convert with every engine and write a comparison report."""
+    from docsift.core.exceptions import DocSiftError
+    from docsift.services.comparison_service import compare_document
+
+    try:
+        comparison = compare_document(path, output_dir=output)
+    except DocSiftError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.secho(
+            f"error: unexpected failure: {type(exc).__name__}", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(code=1) from exc
+
+    for run in comparison.runs:
+        if run.success:
+            typer.echo(
+                f"{run.engine}: ok (duration_ms={run.duration_ms}, "
+                f"estimated_tokens={run.estimated_tokens})"
+            )
+        else:
+            typer.echo(f"{run.engine}: failed ({run.error})")
+    typer.echo(f"comparison_json: {output / (path.stem + '.compare.json')}")
+    typer.echo(f"comparison_report: {output / (path.stem + '.compare.md')}")
+    if not any(run.success for run in comparison.runs):
+        raise typer.Exit(code=1)

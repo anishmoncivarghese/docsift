@@ -75,3 +75,67 @@ def test_unexpected_error_prints_type_only(monkeypatch, tmp_path):
     assert "unexpected failure: PermissionError" in result.output
     assert "secret path details" not in result.output
     assert "Traceback" not in result.output
+
+
+def test_compare_reports_both_engines_and_exits_zero(tmp_path):
+    from docsift.core.exceptions import ConversionFailedError
+
+    class OkEngine(ConversionEngine):
+        name = "markitdown"
+
+        @classmethod
+        def is_available(cls) -> bool:
+            return True
+
+        def convert(self, path: Path) -> EngineOutput:
+            return EngineOutput(markdown="# Hi", engine_version="1.0")
+
+    class FailEngine(OkEngine):
+        name = "docling"
+
+        def convert(self, path: Path) -> EngineOutput:
+            raise ConversionFailedError("docling failed on 'note.txt': BoomError")
+
+    register_engine("markitdown", OkEngine)
+    register_engine("docling", FailEngine)
+    source = tmp_path / "note.txt"
+    source.write_text("hello", encoding="utf-8")
+    out = tmp_path / "cmp"
+    try:
+        result = runner.invoke(app, ["compare", str(source), "--output", str(out)])
+    finally:
+        unregister_engine("markitdown")
+        unregister_engine("docling")
+    assert result.exit_code == 0, result.output
+    assert "markitdown: ok" in result.output
+    assert "docling: failed" in result.output
+    assert (out / "note.compare.json").exists()
+    assert (out / "note.compare.md").exists()
+
+
+def test_compare_exits_one_when_all_engines_fail(tmp_path):
+    from docsift.core.exceptions import ConversionFailedError
+
+    class FailEngine(ConversionEngine):
+        name = "markitdown"
+
+        @classmethod
+        def is_available(cls) -> bool:
+            return True
+
+        def convert(self, path: Path) -> EngineOutput:
+            raise ConversionFailedError("nope")
+
+    class FailEngine2(FailEngine):
+        name = "docling"
+
+    register_engine("markitdown", FailEngine)
+    register_engine("docling", FailEngine2)
+    source = tmp_path / "note.txt"
+    source.write_text("hello", encoding="utf-8")
+    try:
+        result = runner.invoke(app, ["compare", str(source)])
+    finally:
+        unregister_engine("markitdown")
+        unregister_engine("docling")
+    assert result.exit_code == 1
