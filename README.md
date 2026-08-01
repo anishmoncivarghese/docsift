@@ -17,6 +17,12 @@ Status: pre-release (v0.1 in development). See `docs/specs/v0.1-spec.md`.
     uv run docsift convert report.pdf
     uv run docsift convert report.pdf --engine markitdown
     uv run docsift --version
+    uv run docsift compare report.pdf
+    uv run docsift compare report.pdf --output ./comparison
+
+`compare` runs every engine on the same document and writes
+`<name>.compare.json` (machine-readable metrics) and `<name>.compare.md`
+(human-readable report) alongside per-engine output folders.
 
 Output defaults to `./output/` and can be changed with `--output DIR`.
 
