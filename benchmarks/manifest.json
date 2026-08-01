@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "note": "Corpus files are downloaded to benchmarks/corpus/ (git-ignored). Only add documents whose license permits redistribution or direct download: CC-BY, public domain (e.g. US government works), or arXiv papers explicitly under CC licenses.",
+  "documents": [
+    {
+      "id": "docling-technical-report",
+      "category": "technical-report",
+      "url": "https://arxiv.org/pdf/2408.09869",
+      "license": "CC-BY-4.0",
+      "source": "arXiv:2408.09869"
+    }
+  ]
+}

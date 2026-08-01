@@ -9,3 +9,4 @@ build/
 output/
 .env
 .DS_Store
+benchmarks/corpus/
