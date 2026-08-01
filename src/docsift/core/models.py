@@ -68,3 +68,28 @@ class ConversionResult(BaseModel):
     chunks: list[Chunk] = Field(default_factory=list)
     metrics: ConversionMetrics
     warnings: list[ConversionWarning] = Field(default_factory=list)
+
+
+class EngineRunSummary(BaseModel):
+    engine: str
+    success: bool
+    engine_version: str | None = None
+    error: str | None = None
+    duration_ms: int | None = None
+    characters: int | None = None
+    words: int | None = None
+    estimated_tokens: int | None = None
+    heading_count: int | None = None
+    table_count: int | None = None
+    warning_count: int = 0
+    ocr_used: bool = False
+    markdown_path: str | None = None
+    result_json_path: str | None = None
+
+
+class ComparisonResult(BaseModel):
+    schema_version: str = "1"
+    source: SourceMetadata
+    docsift_version: str
+    created_at: datetime
+    runs: list[EngineRunSummary] = Field(default_factory=list)

@@ -51,3 +51,25 @@ def test_result_carries_schema_version():
     result = _result()
     assert result.schema_version == "1"
     assert '"schema_version":"1"' in result.model_dump_json().replace(" ", "")
+
+
+def test_comparison_result_round_trip():
+    from docsift.core.models import ComparisonResult, EngineRunSummary
+
+    comparison = ComparisonResult(
+        source=SourceMetadata(
+            filename="report.pdf",
+            media_type="application/pdf",
+            size_bytes=10,
+            sha256="b" * 64,
+        ),
+        docsift_version="0.1.0.dev0",
+        created_at=datetime.now(UTC),
+        runs=[
+            EngineRunSummary(engine="docling", success=True, estimated_tokens=10),
+            EngineRunSummary(engine="markitdown", success=False, error="ConversionFailedError"),
+        ],
+    )
+    restored = ComparisonResult.model_validate_json(comparison.model_dump_json())
+    assert restored == comparison
+    assert restored.runs[1].success is False
