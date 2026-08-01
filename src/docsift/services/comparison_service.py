@@ -6,6 +6,7 @@ from docsift import __version__
 from docsift.core.exceptions import DocSiftError
 from docsift.core.models import ComparisonResult, EngineRunSummary
 from docsift.processing.markdown_metrics import count_headings, count_tables
+from docsift.services.comparison_report import render_report
 from docsift.services.conversion_service import build_source_metadata, convert_document
 
 DEFAULT_ENGINES: tuple[str, ...] = ("docling", "markitdown")
@@ -56,8 +57,6 @@ def compare_document(
         runs=runs,
     )
     if output_dir is not None:
-        from docsift.services.comparison_report import render_report
-
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / f"{path.stem}.compare.json").write_text(

@@ -15,7 +15,9 @@ _METRICS: tuple[str, ...] = (
 
 def _cell(run: EngineRunSummary, metric: str) -> str:
     value = getattr(run, metric)
-    return "—" if value is None else str(value)
+    if not run.success or value is None:
+        return "—"
+    return str(value)
 
 
 def render_report(comparison: ComparisonResult) -> str:

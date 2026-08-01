@@ -70,3 +70,36 @@ def test_invalid_input_raises_before_any_engine_runs(engines, tmp_path):
     bad.write_text("x", encoding="utf-8")
     with pytest.raises(UnsupportedFileError):
         compare_document(bad)
+
+
+def test_comparison_artifacts_never_contain_document_content(engines, tmp_path):
+    class SecretEngine(GoodEngine):
+        def convert(self, path: Path) -> EngineOutput:
+            return EngineOutput(markdown="# CONFIDENTIAL-XYZ body", engine_version="1.0.0")
+
+    register_engine("markitdown", SecretEngine)
+    source = tmp_path / "note.txt"
+    source.write_text("hello", encoding="utf-8")
+    out = tmp_path / "cmp"
+    try:
+        compare_document(source, output_dir=out)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", GoodEngine)
+    assert "CONFIDENTIAL-XYZ" in (out / "markitdown" / "note.md").read_text(encoding="utf-8")
+    assert "CONFIDENTIAL-XYZ" not in (out / "note.compare.json").read_text(encoding="utf-8")
+    assert "CONFIDENTIAL-XYZ" not in (out / "note.compare.md").read_text(encoding="utf-8")
+
+
+def test_unexpected_failure_records_type_name_only(engines, text_file, monkeypatch):
+    import docsift.services.comparison_service as cs
+
+    def explode(path, engine="auto", output_dir=None):
+        raise PermissionError("secret path details")
+
+    monkeypatch.setattr(cs, "convert_document", explode)
+    comparison = compare_document(text_file)
+    for run in comparison.runs:
+        assert run.success is False
+        assert run.error == "PermissionError"
+        assert "secret path details" not in (run.error or "")

@@ -62,6 +62,7 @@ def convert_document(
     path: Path, engine: str = "auto", output_dir: Path | None = None
 ) -> ConversionResult:
     path = Path(path)
+    _validate(path)
     engine_name, reason = select_engine_name(path, engine)
     engine_impl = get_engine(engine_name)
     source = build_source_metadata(path)

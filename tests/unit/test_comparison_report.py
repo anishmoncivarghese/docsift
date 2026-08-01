@@ -41,5 +41,7 @@ def test_report_contains_metric_table_and_errors():
     assert "| metric | docling | markitdown |" in report
     assert "| status | ok | failed |" in report
     assert "| estimated_tokens | 225 | — |" in report
+    assert "| warning_count | 0 | — |" in report
+    assert "| ocr_used | False | — |" in report
     assert "BoomError" in report
     assert "cccccccccccc" in report  # sha prefix shown
