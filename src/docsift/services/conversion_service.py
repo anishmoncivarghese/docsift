@@ -1,0 +1,103 @@
+import hashlib
+import mimetypes
+from datetime import UTC, datetime
+from pathlib import Path
+
+from docsift import __version__
+from docsift.core.exceptions import ConversionFailedError, DocSiftError, UnsupportedFileError
+from docsift.core.models import (
+    ConversionMetadata,
+    ConversionMetrics,
+    ConversionResult,
+    DocumentContent,
+    SourceMetadata,
+)
+from docsift.engines.registry import get_engine
+from docsift.engines.router import select_engine_name
+from docsift.processing.token_estimator import estimate_tokens
+
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _validate(path: Path) -> int:
+    if not path.is_file():
+        raise UnsupportedFileError(f"not a file: {path}")
+    size = path.stat().st_size
+    if size == 0:
+        raise UnsupportedFileError(f"file is empty: {path}")
+    if size > MAX_FILE_SIZE_BYTES:
+        raise UnsupportedFileError(
+            f"file is {size} bytes; maximum is {MAX_FILE_SIZE_BYTES} (50 MB)"
+        )
+    return size
+
+
+def convert_document(
+    path: Path, engine: str = "auto", output_dir: Path | None = None
+) -> ConversionResult:
+    path = Path(path)
+    size = _validate(path)
+    engine_name, reason = select_engine_name(path, engine)
+    engine_impl = get_engine(engine_name)
+    sha = _sha256(path)
+
+    started = datetime.now(UTC)
+    try:
+        output = engine_impl.convert(path)
+    except DocSiftError:
+        raise
+    except Exception as exc:  # engine bugs must surface as structured errors
+        # Exception text can quote document content; expose only the type name.
+        raise ConversionFailedError(
+            f"{engine_name} failed on '{path.name}': {type(exc).__name__}"
+        ) from exc
+    completed = datetime.now(UTC)
+
+    markdown = output.markdown
+    result = ConversionResult(
+        document_id=f"doc_{sha[:12]}",
+        source=SourceMetadata(
+            filename=path.name,
+            media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            size_bytes=size,
+            sha256=sha,
+        ),
+        conversion=ConversionMetadata(
+            engine=engine_name,
+            engine_version=output.engine_version,
+            docsift_version=__version__,
+            selection_reason=reason,
+            started_at=started,
+            completed_at=completed,
+            duration_ms=int((completed - started).total_seconds() * 1000),
+            ocr_used=output.ocr_used,
+        ),
+        document=DocumentContent(
+            title=output.title,
+            page_count=output.page_count,
+            markdown=markdown,
+        ),
+        metrics=ConversionMetrics(
+            characters=len(markdown),
+            words=len(markdown.split()),
+            estimated_tokens=estimate_tokens(markdown),
+        ),
+        warnings=list(output.warnings),
+    )
+
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / f"{path.stem}.md").write_text(markdown, encoding="utf-8")
+        (output_dir / f"{path.stem}.docsift.json").write_text(
+            result.model_dump_json(indent=2), encoding="utf-8"
+        )
+    return result
