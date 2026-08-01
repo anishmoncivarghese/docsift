@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from docsift.core.exceptions import UnsupportedFileError
+from docsift.core.exceptions import ConversionFailedError, UnsupportedFileError
 from docsift.core.models import ConversionResult, EngineOutput
 from docsift.engines.base import ConversionEngine
 from docsift.engines.registry import register_engine, unregister_engine
@@ -18,6 +18,28 @@ class StubEngine(ConversionEngine):
 
     def convert(self, path: Path) -> EngineOutput:
         return EngineOutput(markdown="# Stubbed\n\nHello.", engine_version="9.9.9")
+
+
+class ExplodingEngine(ConversionEngine):
+    name = "markitdown"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    def convert(self, path: Path) -> EngineOutput:
+        raise ValueError("secret document content")
+
+
+class StructuredFailureEngine(ConversionEngine):
+    name = "markitdown"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    def convert(self, path: Path) -> EngineOutput:
+        raise ConversionFailedError("engine says no")
 
 
 @pytest.fixture
@@ -67,3 +89,24 @@ def test_empty_file_raises(tmp_path):
     empty.touch()
     with pytest.raises(UnsupportedFileError, match="empty"):
         convert_document(empty)
+
+
+def test_unexpected_engine_error_wraps_without_raw_exception_text(text_file):
+    register_engine("markitdown", ExplodingEngine)
+    try:
+        with pytest.raises(ConversionFailedError) as excinfo:
+            convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+    message = str(excinfo.value)
+    assert "ValueError" in message
+    assert "secret document content" not in message
+
+
+def test_docsift_errors_pass_through_unwrapped(text_file):
+    register_engine("markitdown", StructuredFailureEngine)
+    try:
+        with pytest.raises(ConversionFailedError, match="engine says no"):
+            convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
