@@ -8,7 +8,7 @@ Open-source document-preparation gateway: PDFs and Office files in → clean, st
 
 - **PRD (source of truth for scope):** `../DocSift_PRD_v0.2.md`
 - **v0.1 spec:** `docs/specs/v0.1-spec.md`
-- **Active plan:** `docs/superpowers/plans/2026-08-01-m0-m1-bootstrap-and-conversion.md`
+- **Active plan:** `docs/superpowers/plans/2026-08-01-m2-comparison-harness.md`
 
 The product owner is a non-technical founder: explain trade-offs in plain language, keep responses concise, and never assume knowledge of programming jargon.
 
