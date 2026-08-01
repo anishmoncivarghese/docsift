@@ -46,14 +46,25 @@ def _validate(path: Path) -> int:
     return size
 
 
+def build_source_metadata(path: Path) -> SourceMetadata:
+    """Validate `path` and describe it. Raises UnsupportedFileError for bad inputs."""
+    path = Path(path)
+    size = _validate(path)
+    return SourceMetadata(
+        filename=path.name,
+        media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        size_bytes=size,
+        sha256=_sha256(path),
+    )
+
+
 def convert_document(
     path: Path, engine: str = "auto", output_dir: Path | None = None
 ) -> ConversionResult:
     path = Path(path)
-    size = _validate(path)
     engine_name, reason = select_engine_name(path, engine)
     engine_impl = get_engine(engine_name)
-    sha = _sha256(path)
+    source = build_source_metadata(path)
 
     started = datetime.now(UTC)
     try:
@@ -77,13 +88,8 @@ def convert_document(
             )
         )
     result = ConversionResult(
-        document_id=f"doc_{sha[:12]}",
-        source=SourceMetadata(
-            filename=path.name,
-            media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-            size_bytes=size,
-            sha256=sha,
-        ),
+        document_id=f"doc_{source.sha256[:12]}",
+        source=source,
         conversion=ConversionMetadata(
             engine=engine_name,
             engine_version=output.engine_version,
