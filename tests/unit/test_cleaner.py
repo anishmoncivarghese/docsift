@@ -79,3 +79,52 @@ def test_idempotent():
     twice, stats = clean_markdown(once)
     assert twice == once
     assert stats.furniture_lines_removed == 0
+
+
+FENCED = """# Guide
+
+Intro text.
+
+```python
+def foo():
+    return 1
+    return 1
+```
+
+Some prose.
+
+```
+ERROR: retry
+ERROR: retry
+ERROR: retry
+DONE
+```
+
+Closing text.
+"""
+
+
+def test_fenced_code_duplicates_survive():
+    cleaned, stats = clean_markdown(FENCED)
+    assert cleaned.count("return 1") == 2
+    assert stats.duplicate_lines_removed == 0
+
+
+def test_fenced_log_lines_are_not_furniture():
+    cleaned, stats = clean_markdown(FENCED)
+    assert cleaned.count("ERROR: retry") == 3
+    assert stats.furniture_lines_removed == 0
+
+
+def test_fenced_page_number_lines_survive():
+    doc = "# T\n\n```\n42\n```\n\n42\n"
+    cleaned, stats = clean_markdown(doc)
+    assert "```\n42\n```" in cleaned
+    assert stats.page_number_lines_removed == 1
+
+
+def test_cleaning_still_works_outside_fences():
+    doc = FENCED + "\nBoilerplate line\nBoilerplate line\n\nBoilerplate line\n"
+    cleaned, stats = clean_markdown(doc)
+    assert "Boilerplate line" not in cleaned
+    assert cleaned.count("return 1") == 2
