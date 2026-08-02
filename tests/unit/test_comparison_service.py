@@ -94,7 +94,7 @@ def test_comparison_artifacts_never_contain_document_content(engines, tmp_path):
 def test_unexpected_failure_records_type_name_only(engines, text_file, monkeypatch):
     import docsift.services.comparison_service as cs
 
-    def explode(path, engine="auto", output_dir=None):
+    def explode(path, engine="auto", output_dir=None, use_cache=True):
         raise PermissionError("secret path details")
 
     monkeypatch.setattr(cs, "convert_document", explode)

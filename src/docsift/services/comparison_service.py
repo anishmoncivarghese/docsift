@@ -14,7 +14,7 @@ DEFAULT_ENGINES: tuple[str, ...] = ("docling", "markitdown")
 
 def _run_engine(path: Path, engine: str, output_dir: Path | None) -> EngineRunSummary:
     try:
-        result = convert_document(path, engine=engine, output_dir=output_dir)
+        result = convert_document(path, engine=engine, output_dir=output_dir, use_cache=False)
     except DocSiftError as exc:
         return EngineRunSummary(engine=engine, success=False, error=str(exc))
     except Exception as exc:  # never leak content; expose only the type name

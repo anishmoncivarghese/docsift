@@ -40,6 +40,9 @@ def convert(
     keep_image_refs: bool = typer.Option(
         False, "--keep-image-refs", help="Keep image references in the Markdown."
     ),
+    no_cache: bool = typer.Option(
+        False, "--no-cache", help="Convert even if a cached result exists."
+    ),
 ) -> None:
     """Convert a document to clean Markdown plus a normalized JSON result."""
     from docsift.core.exceptions import DocSiftError
@@ -52,7 +55,9 @@ def convert(
     )
 
     try:
-        result = convert_document(path, engine=engine, output_dir=output, options=options)
+        result = convert_document(
+            path, engine=engine, output_dir=output, options=options, use_cache=not no_cache
+        )
     except DocSiftError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc

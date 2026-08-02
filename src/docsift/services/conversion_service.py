@@ -19,6 +19,7 @@ from docsift.engines.router import SUPPORTED_SUFFIXES, select_engine_name
 from docsift.processing.chunker import chunk_markdown
 from docsift.processing.cleaner import clean_markdown
 from docsift.processing.token_estimator import estimate_tokens
+from docsift.storage.cache import cache_key, load_cached, store_cached
 
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
@@ -61,11 +62,23 @@ def build_source_metadata(path: Path) -> SourceMetadata:
     )
 
 
+def _write_artifacts(result: ConversionResult, path: Path, output_dir: Path | None) -> None:
+    if output_dir is None:
+        return
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / f"{path.stem}.md").write_text(result.document.markdown, encoding="utf-8")
+    (output_dir / f"{path.stem}.docsift.json").write_text(
+        result.model_dump_json(indent=2), encoding="utf-8"
+    )
+
+
 def convert_document(
     path: Path,
     engine: str = "auto",
     output_dir: Path | None = None,
     options: ConversionOptions | None = None,
+    use_cache: bool = True,
 ) -> ConversionResult:
     options = options or ConversionOptions()
     path = Path(path)
@@ -73,6 +86,15 @@ def convert_document(
     engine_name, reason = select_engine_name(path, engine)
     engine_impl = get_engine(engine_name)
     source = build_source_metadata(path)
+
+    key = cache_key(source.sha256, engine_name, engine_impl.version(), __version__, options)
+    if use_cache:
+        cached = load_cached(key)
+        if cached is not None:
+            cached = cached.model_copy(deep=True)
+            cached.conversion.cached = True
+            _write_artifacts(cached, path, output_dir)
+            return cached
 
     started = datetime.now(UTC)
     try:
@@ -137,11 +159,7 @@ def convert_document(
         warnings=warnings,
     )
 
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        (output_dir / f"{path.stem}.md").write_text(markdown, encoding="utf-8")
-        (output_dir / f"{path.stem}.docsift.json").write_text(
-            result.model_dump_json(indent=2), encoding="utf-8"
-        )
+    if use_cache:
+        store_cached(key, result)
+    _write_artifacts(result, path, output_dir)
     return result

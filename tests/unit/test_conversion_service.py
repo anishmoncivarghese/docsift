@@ -9,6 +9,11 @@ from docsift.engines.registry import register_engine, unregister_engine
 from docsift.services.conversion_service import convert_document
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cache_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("DOCSIFT_CACHE_DIR", str(tmp_path / "cache"))
+
+
 class EmptyEngine(ConversionEngine):
     name = "markitdown"
 
