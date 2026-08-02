@@ -10,7 +10,7 @@ _PAGE_MARKER = re.compile(r"^<!-- page: \d+ -->$")
 _PAGE_NUMBER = re.compile(r"^(page\s+)?\d+(\s+of\s+\d+)?$", re.IGNORECASE)
 _IMAGE_REF = re.compile(r"^!\[[^\]]*\]\([^)]*\)$")
 _LIST_ITEM = re.compile(r"^[-*+] |^\d+[.)] ")
-_FENCE = re.compile(r"^(```|~~~)")
+_FENCE = re.compile(r"^(`{3,}|~{3,})")
 
 
 class CleanStats(BaseModel):
@@ -34,16 +34,23 @@ def _mark_fences(lines: list[str]) -> list[tuple[str, bool]]:
     """Pair each line with True when it delimits or lives inside a fenced code block.
 
     Code samples and log excerpts legitimately contain repeated lines; every
-    cleaning stage skips fenced content so it is never altered.
+    cleaning stage skips fenced content so it is never altered. Per CommonMark,
+    a fence closes only on the same character with a run at least as long as the
+    opener, so a `~~~` line inside a ``` block stays content rather than closing it.
     """
     marked: list[tuple[str, bool]] = []
-    in_fence = False
+    opener: tuple[str, int] | None = None
     for line in lines:
-        if _FENCE.match(line.strip()):
+        match = _FENCE.match(line.strip())
+        if match:
+            run = match.group(1)
+            if opener is None:
+                opener = (run[0], len(run))
+            elif run[0] == opener[0] and len(run) >= opener[1]:
+                opener = None
             marked.append((line, True))
-            in_fence = not in_fence
             continue
-        marked.append((line, in_fence))
+        marked.append((line, opener is not None))
     return marked
 
 

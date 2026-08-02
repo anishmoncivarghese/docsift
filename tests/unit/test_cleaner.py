@@ -128,3 +128,34 @@ def test_cleaning_still_works_outside_fences():
     cleaned, stats = clean_markdown(doc)
     assert "Boilerplate line" not in cleaned
     assert cleaned.count("return 1") == 2
+
+
+NESTED_FENCE_DOC = """# Guide
+
+```
+Example showing tilde fences:
+~~~
+42
+return 1
+return 1
+```
+
+Normal text 42
+"""
+
+
+def test_mismatched_inner_fence_does_not_desync():
+    cleaned, stats = clean_markdown(NESTED_FENCE_DOC)
+    assert cleaned.count("return 1") == 2
+    assert "~~~" in cleaned
+    assert stats.duplicate_lines_removed == 0
+    assert stats.page_number_lines_removed == 0
+    assert "Normal text 42" in cleaned
+
+
+def test_longer_fence_closes_only_on_matching_run():
+    doc = "# T\n\n````\n```\n42\n42\n````\n\nAfter.\n"
+    cleaned, stats = clean_markdown(doc)
+    assert cleaned.count("42") == 2
+    assert stats.duplicate_lines_removed == 0
+    assert stats.page_number_lines_removed == 0
