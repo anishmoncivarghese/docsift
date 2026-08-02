@@ -54,7 +54,7 @@ class DoclingEngine(ConversionEngine):
             engine_version=metadata.version("docling"),
         )
 
-    def _chunk(self, document, chunk_options):
+    def _chunk(self, document: object, chunk_options: ChunkOptions):
         """Map docling HybridChunker output to neutral Chunk models; degrade gracefully."""
         from docsift.processing.token_estimator import estimate_tokens
 

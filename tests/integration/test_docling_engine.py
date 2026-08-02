@@ -69,3 +69,4 @@ def test_convert_produces_hybrid_chunks(tmp_path):
 def test_markdown_contains_page_breaks_when_supported():
     output = DoclingEngine().convert(FIXTURES / "multipage.pdf")
     assert output.page_count == 3
+    assert output.markdown.count("<!-- page-break -->") == 2
