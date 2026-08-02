@@ -51,3 +51,21 @@ def test_wrapper_strips_injected_exception_text(monkeypatch, tmp_path):
     message = str(excinfo.value)
     assert "secret document content" not in message
     assert "ValueError" in message
+
+
+def test_convert_produces_hybrid_chunks(tmp_path):
+    from docsift.core.options import ChunkOptions, ConversionOptions
+
+    options = ConversionOptions(chunk=ChunkOptions(max_tokens=200, overlap_tokens=0))
+    output = DoclingEngine().convert(FIXTURES / "multipage.pdf", options)
+    assert output.chunks, "docling should produce HybridChunker chunks"
+    for chunk in output.chunks:
+        assert chunk.text.strip()
+        assert chunk.estimated_tokens <= 200
+        assert chunk.chunk_id.startswith("c")
+    assert any(chunk.pages for chunk in output.chunks)
+
+
+def test_markdown_contains_page_breaks_when_supported():
+    output = DoclingEngine().convert(FIXTURES / "multipage.pdf")
+    assert output.page_count == 3
