@@ -26,6 +26,18 @@ Status: pre-release (v0.1 in development). See `docs/specs/v0.1-spec.md`.
 
 Output defaults to `./output/` and can be changed with `--output DIR`.
 
+## Chunking and cleaning
+
+Conversion cleans the Markdown (repeated headers/footers, page numbers, image
+references) and splits it into token-budgeted chunks with heading context:
+
+    uv run docsift convert report.pdf --max-tokens 800 --overlap 100
+    uv run docsift convert report.pdf --keep-image-refs
+    uv run docsift convert report.pdf --no-cache
+
+Results are cached in `~/.cache/docsift` (override with `DOCSIFT_CACHE_DIR`);
+an unchanged file with unchanged settings returns instantly.
+
 ## License
 
 MIT
