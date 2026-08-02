@@ -159,3 +159,21 @@ def test_longer_fence_closes_only_on_matching_run():
     assert cleaned.count("42") == 2
     assert stats.duplicate_lines_removed == 0
     assert stats.page_number_lines_removed == 0
+
+
+def test_info_string_line_does_not_close_a_fence():
+    doc = (
+        "# Markdown Guide\n\n"
+        "```\n"
+        "To start a python code block, write:\n"
+        "```python\n"
+        "def f(): pass\n"
+        "42\n"
+        "42\n"
+        "```\n\n"
+        "Real prose after. 42\n"
+    )
+    cleaned, stats = clean_markdown(doc)
+    assert cleaned.count("42\n42") == 1
+    assert stats.page_number_lines_removed == 0
+    assert stats.duplicate_lines_removed == 0

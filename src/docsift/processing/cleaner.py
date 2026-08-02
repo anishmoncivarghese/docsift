@@ -37,16 +37,19 @@ def _mark_fences(lines: list[str]) -> list[tuple[str, bool]]:
     cleaning stage skips fenced content so it is never altered. Per CommonMark,
     a fence closes only on the same character with a run at least as long as the
     opener, so a `~~~` line inside a ``` block stays content rather than closing it.
+    A closing fence may not carry an info string, so ``` python inside an open block stays content.
     """
     marked: list[tuple[str, bool]] = []
     opener: tuple[str, int] | None = None
     for line in lines:
-        match = _FENCE.match(line.strip())
+        stripped = line.strip()
+        match = _FENCE.match(stripped)
         if match:
             run = match.group(1)
+            trailing = stripped[len(run) :].strip()
             if opener is None:
                 opener = (run[0], len(run))
-            elif run[0] == opener[0] and len(run) >= opener[1]:
+            elif run[0] == opener[0] and len(run) >= opener[1] and not trailing:
                 opener = None
             marked.append((line, True))
             continue
