@@ -72,3 +72,37 @@ def test_overlap_carries_previous_tail():
 
 def test_empty_markdown_yields_no_chunks():
     assert chunk_markdown("", "doc_e") == []
+
+
+def test_trailing_heading_without_body_is_preserved():
+    doc = "# Title\n\nIntro paragraph with enough words to matter here.\n\n## Appendix\n"
+    chunks = chunk_markdown(doc, "doc_x")
+    assert chunks
+    assert any("## Appendix" in chunk.text for chunk in chunks)
+
+
+def test_headings_only_document_is_preserved():
+    chunks = chunk_markdown("# A\n\n## B\n\n### C\n", "doc_h")
+    assert chunks
+    joined = "\n".join(chunk.text for chunk in chunks)
+    assert "# A" in joined
+    assert "## B" in joined
+    assert "### C" in joined
+
+
+def test_budget_exceeded_only_by_an_indivisible_block():
+    for chunk in chunk_markdown(DOC, "doc_abc", SMALL):
+        if chunk.estimated_tokens > SMALL.max_tokens + SMALL.overlap_tokens:
+            body_blocks = [
+                block
+                for block in chunk.text.split("\n\n")
+                if block.strip() and not block.strip().startswith("#")
+            ]
+            assert len(body_blocks) <= 1, chunk.text
+
+
+def test_section_path_reports_deepest_context():
+    doc = "# H1\n\n## H2\n\n### H3\n\nparagraph body text\n"
+    chunks = chunk_markdown(doc, "doc_n")
+    assert chunks
+    assert chunks[-1].section_path == ["H1", "H2", "H3"]

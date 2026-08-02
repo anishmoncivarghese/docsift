@@ -109,9 +109,19 @@ def chunk_markdown(
     does not supply its own chunks.
 
     Headings stay with their first paragraph (never the last block of a
-    chunk), tables stay intact unless oversized (split by rows, header
-    repeated), and each chunk after the first carries an overlap tail
-    from the previous chunk.
+    chunk, except when the document itself ends on a heading with no
+    trailing body), tables stay intact unless oversized (split by rows,
+    header repeated), and each chunk after the first carries an overlap
+    tail from the previous chunk.
+
+    Token budget guarantee: every chunk stays within ``max_tokens``
+    EXCEPT when it contains at most one non-heading content block (a
+    single paragraph or table part that cannot be sub-split), in which
+    case that indivisible block — plus any headings that must stay
+    attached to it — may push the chunk over ``max_tokens`` (bounded in
+    practice by that one block's size plus the carried overlap). This is
+    the deliberate cost of never orphaning a heading from its content or
+    slicing a paragraph mid-sentence.
     """
     options = options or ChunkOptions()
     blocks: list[dict] = []
@@ -127,7 +137,7 @@ def chunk_markdown(
     chunks: list[Chunk] = []
     current: list[dict] = []
 
-    def flush() -> None:
+    def flush(final: bool = False) -> None:
         nonlocal current
         if not current:
             return
@@ -138,21 +148,46 @@ def chunk_markdown(
         # ends with a heading — violating the "no chunk ends with a heading"
         # exit criterion. Carrying all of them forward keeps the full nested
         # heading stack intact for whichever content block arrives next.
+        #
+        # Only do this mid-stream. On the terminal flush (`final=True`) there
+        # is no "next content block" coming — carrying trailing headings out
+        # would just re-stash them in `current` forever and silently drop
+        # them when the caller stops calling flush(). If the document itself
+        # ends on a heading, that heading legitimately becomes the last block
+        # of the last chunk; a document must never lose content just because
+        # its last line happens to be a heading.
         carried: list[dict] = []
-        while current and current[-1]["kind"] == "heading":
-            carried.insert(0, current.pop())
+        if not final:
+            while current and current[-1]["kind"] == "heading":
+                carried.insert(0, current.pop())
         content = [b for b in current if b["kind"] != "overlap"]
         if not content:
             current = list(carried)
             return
         text = "\n\n".join(_block_text(b) for b in current)
         pages = sorted({b["page"] for b in content if b["page"] is not None})
+        # section_path is derived from the chunk's first non-heading (body)
+        # block, not the first block overall and not the last block. Headings
+        # sitting at the top of a chunk are scaffolding for the body that
+        # follows, so the body is what establishes what the chunk is
+        # actually about — using the first heading would under-report nested
+        # context (e.g. "H1/H2/H3" collapsing to "H1"), and using the last
+        # block would report where a multi-section chunk ended up rather
+        # than what it's mostly about (e.g. a chunk that's mostly "Expenses"
+        # content plus a trailing "Risks" heading would misreport as
+        # "Risks"). Each block's `path` was captured at parse time from the
+        # fully-resolved heading stack at that point, so the first body
+        # block's path is already the deepest context under which that body
+        # sits. Fall back to the last block (necessarily a heading) only for
+        # the rare heading-only chunk, where no body block exists.
+        body = [block for block in content if block["kind"] != "heading"]
+        section_source = body[0] if body else content[-1]
         chunks.append(
             Chunk(
                 chunk_id=f"{document_id}_c{len(chunks):03d}",
                 text=text,
                 estimated_tokens=estimate_tokens(text),
-                section_path=list(content[0]["path"]),
+                section_path=list(section_source["path"]),
                 pages=pages,
             )
         )
@@ -210,5 +245,5 @@ def chunk_markdown(
             break
         current.append(block)
         running += block_tokens
-    flush()
+    flush(final=True)
     return chunks
