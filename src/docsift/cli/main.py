@@ -35,13 +35,24 @@ def convert(
     path: Path = typer.Argument(..., help="File to convert."),
     engine: str = typer.Option("auto", help="Engine: auto, docling, or markitdown."),
     output: Path = typer.Option(Path("output"), help="Directory for Markdown and JSON."),
+    max_tokens: int = typer.Option(1000, help="Maximum tokens per chunk."),
+    overlap: int = typer.Option(100, help="Token overlap between chunks."),
+    keep_image_refs: bool = typer.Option(
+        False, "--keep-image-refs", help="Keep image references in the Markdown."
+    ),
 ) -> None:
     """Convert a document to clean Markdown plus a normalized JSON result."""
     from docsift.core.exceptions import DocSiftError
+    from docsift.core.options import ChunkOptions, CleanOptions, ConversionOptions
     from docsift.services.conversion_service import convert_document
 
+    options = ConversionOptions(
+        clean=CleanOptions(remove_image_refs=not keep_image_refs),
+        chunk=ChunkOptions(max_tokens=max_tokens, overlap_tokens=overlap),
+    )
+
     try:
-        result = convert_document(path, engine=engine, output_dir=output)
+        result = convert_document(path, engine=engine, output_dir=output, options=options)
     except DocSiftError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -53,6 +64,7 @@ def convert(
     typer.echo(f"document_id: {result.document_id}")
     typer.echo(f"engine: {result.conversion.engine} ({result.conversion.selection_reason})")
     typer.echo(f"estimated_tokens: {result.metrics.estimated_tokens}")
+    typer.echo(f"chunks: {len(result.chunks)}")
     typer.echo(f"markdown: {output / (path.stem + '.md')}")
     typer.echo(f"result_json: {output / (path.stem + '.docsift.json')}")
 

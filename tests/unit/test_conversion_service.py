@@ -75,7 +75,7 @@ def test_returns_normalized_result(stub_engine, text_file):
     assert result.conversion.engine == "markitdown"
     assert result.conversion.engine_version == "9.9.9"
     assert result.conversion.selection_reason
-    assert result.document.markdown == "# Stubbed\n\nHello."
+    assert result.document.markdown == "# Stubbed\n\nHello.\n"
     assert result.metrics.estimated_tokens >= 1
     assert result.source.sha256 == result.source.sha256.lower()
     assert len(result.source.sha256) == 64
@@ -137,3 +137,59 @@ def test_empty_conversion_emits_warning(text_file):
     finally:
         unregister_engine("markitdown")
     assert any(w.code == "empty_output" for w in result.warnings)
+
+
+NOISY_MD = (
+    "# Title\n\nReal paragraph one.\n\nCorp Confidential\n<!-- page-break -->\n"
+    "Corp Confidential\n\nSecond paragraph.\n<!-- page-break -->\nCorp Confidential\n\n42\n"
+)
+
+
+class NoisyEngine(ConversionEngine):
+    name = "markitdown"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    def convert(self, path: Path, options=None) -> EngineOutput:
+        return EngineOutput(markdown=NOISY_MD, engine_version="9.9.9")
+
+
+class PrechunkedEngine(NoisyEngine):
+    def convert(self, path: Path, options=None) -> EngineOutput:
+        from docsift.core.models import Chunk
+
+        return EngineOutput(
+            markdown="# T\n\nBody.",
+            engine_version="9.9.9",
+            chunks=[Chunk(chunk_id="c000", text="Body.", estimated_tokens=2)],
+        )
+
+
+def test_pipeline_cleans_and_chunks(stub_engine, text_file):
+    register_engine("markitdown", NoisyEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert "Corp Confidential" not in result.document.markdown
+    assert "<!-- page: 2 -->" in result.document.markdown
+    assert result.metrics.raw_estimated_tokens is not None
+    assert result.metrics.raw_estimated_tokens > result.metrics.estimated_tokens
+    assert result.metrics.duplicate_lines_removed >= 3
+    assert result.chunks
+    assert result.chunks[0].chunk_id == f"{result.document_id}_c000"
+
+
+def test_engine_chunks_win_over_fallback(stub_engine, text_file):
+    register_engine("markitdown", PrechunkedEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert len(result.chunks) == 1
+    assert result.chunks[0].chunk_id == f"{result.document_id}_c000"
+    assert result.chunks[0].text == "Body."

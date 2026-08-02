@@ -64,7 +64,7 @@ def test_convert_unsupported_file_exits_nonzero(tmp_path):
 def test_unexpected_error_prints_type_only(monkeypatch, tmp_path):
     import docsift.services.conversion_service as svc
 
-    def explode(path, engine="auto", output_dir=None):
+    def explode(path, engine="auto", output_dir=None, options=None):
         raise PermissionError("secret path details")
 
     monkeypatch.setattr(svc, "convert_document", explode)
@@ -111,6 +111,18 @@ def test_compare_reports_both_engines_and_exits_zero(tmp_path):
     assert "docling: failed" in result.output
     assert (out / "note.compare.json").exists()
     assert (out / "note.compare.md").exists()
+
+
+def test_convert_reports_chunks_and_accepts_chunk_flags(stub_engine, tmp_path):
+    source = tmp_path / "note.txt"
+    source.write_text("hello", encoding="utf-8")
+    out = tmp_path / "out"
+    result = runner.invoke(
+        app,
+        ["convert", str(source), "--output", str(out), "--max-tokens", "500", "--overlap", "50"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "chunks:" in result.output
 
 
 def test_compare_exits_one_when_all_engines_fail(tmp_path):

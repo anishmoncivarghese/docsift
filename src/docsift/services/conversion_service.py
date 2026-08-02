@@ -13,8 +13,11 @@ from docsift.core.models import (
     DocumentContent,
     SourceMetadata,
 )
+from docsift.core.options import ConversionOptions
 from docsift.engines.registry import get_engine
 from docsift.engines.router import SUPPORTED_SUFFIXES, select_engine_name
+from docsift.processing.chunker import chunk_markdown
+from docsift.processing.cleaner import clean_markdown
 from docsift.processing.token_estimator import estimate_tokens
 
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
@@ -59,8 +62,12 @@ def build_source_metadata(path: Path) -> SourceMetadata:
 
 
 def convert_document(
-    path: Path, engine: str = "auto", output_dir: Path | None = None
+    path: Path,
+    engine: str = "auto",
+    output_dir: Path | None = None,
+    options: ConversionOptions | None = None,
 ) -> ConversionResult:
+    options = options or ConversionOptions()
     path = Path(path)
     _validate(path)
     engine_name, reason = select_engine_name(path, engine)
@@ -69,7 +76,7 @@ def convert_document(
 
     started = datetime.now(UTC)
     try:
-        output = engine_impl.convert(path)
+        output = engine_impl.convert(path, options)
     except DocSiftError:
         raise
     except Exception as exc:  # engine bugs must surface as structured errors
@@ -79,7 +86,18 @@ def convert_document(
         ) from exc
     completed = datetime.now(UTC)
 
-    markdown = output.markdown
+    raw_markdown = output.markdown
+    markdown, clean_stats = clean_markdown(raw_markdown, options.clean)
+    document_id = f"doc_{source.sha256[:12]}"
+
+    if output.chunks is not None:
+        chunks = [
+            chunk.model_copy(update={"chunk_id": f"{document_id}_{chunk.chunk_id}"})
+            for chunk in output.chunks
+        ]
+    else:
+        chunks = chunk_markdown(markdown, document_id, options.chunk)
+
     warnings = list(output.warnings)
     if not markdown.strip():
         warnings.append(
@@ -89,7 +107,7 @@ def convert_document(
             )
         )
     result = ConversionResult(
-        document_id=f"doc_{source.sha256[:12]}",
+        document_id=document_id,
         source=source,
         conversion=ConversionMetadata(
             engine=engine_name,
@@ -106,10 +124,15 @@ def convert_document(
             page_count=output.page_count,
             markdown=markdown,
         ),
+        chunks=chunks,
         metrics=ConversionMetrics(
             characters=len(markdown),
             words=len(markdown.split()),
             estimated_tokens=estimate_tokens(markdown),
+            raw_estimated_tokens=estimate_tokens(raw_markdown),
+            duplicate_lines_removed=(
+                clean_stats.duplicate_lines_removed + clean_stats.furniture_lines_removed
+            ),
         ),
         warnings=warnings,
     )
