@@ -204,3 +204,62 @@ def test_info_string_line_does_not_close_a_fence():
     assert cleaned.count("42\n42") == 1
     assert stats.page_number_lines_removed == 0
     assert stats.duplicate_lines_removed == 0
+
+
+def test_plan_reuse_matches_one_shot_cleaning():
+    from docsift.processing.cleaner import build_clean_plan
+
+    plan = build_clean_plan(NOISY)
+    with_plan, stats_with = clean_markdown(NOISY, plan=plan)
+    one_shot, stats_one = clean_markdown(NOISY)
+    assert with_plan == one_shot
+    assert stats_with == stats_one
+
+
+def test_plan_records_detected_furniture():
+    from docsift.processing.cleaner import build_clean_plan
+
+    plan = build_clean_plan(NOISY)
+    assert "ACME Corp Confidential" in plan.furniture
+
+
+def test_excerpt_strips_planned_furniture_anywhere():
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    plan = build_clean_plan(NOISY)
+    excerpt = "Some body text.\nACME Corp Confidential\nMore body text.\n"
+    cleaned, stats = clean_excerpt(excerpt, plan)
+    assert "ACME Corp Confidential" not in cleaned
+    assert "Some body text." in cleaned
+    assert "More body text." in cleaned
+    assert stats.furniture_lines_removed == 1
+
+
+def test_excerpt_strips_page_numbers_and_image_refs():
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    plan = build_clean_plan(NOISY)
+    cleaned, stats = clean_excerpt("Body.\n7\n![x](y.png)\nMore.\n", plan)
+    assert "\n7\n" not in cleaned
+    assert "![x]" not in cleaned
+    assert stats.page_number_lines_removed == 1
+    assert stats.image_refs_removed == 1
+
+
+def test_excerpt_leaves_fenced_content_alone():
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    plan = build_clean_plan(NOISY)
+    excerpt = "```\nACME Corp Confidential\n42\n```\n"
+    cleaned, stats = clean_excerpt(excerpt, plan)
+    assert "ACME Corp Confidential" in cleaned
+    assert "42" in cleaned
+    assert stats.furniture_lines_removed == 0
+
+
+def test_excerpt_with_empty_plan_is_a_near_noop():
+    from docsift.processing.cleaner import CleanPlan, clean_excerpt
+
+    cleaned, stats = clean_excerpt("Alpha.\nBeta.\n", CleanPlan())
+    assert cleaned == "Alpha.\nBeta.\n"
+    assert stats.furniture_lines_removed == 0
