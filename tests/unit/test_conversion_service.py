@@ -197,4 +197,73 @@ def test_engine_chunks_win_over_fallback(stub_engine, text_file):
         register_engine("markitdown", StubEngine)
     assert len(result.chunks) == 1
     assert result.chunks[0].chunk_id == f"{result.document_id}_c000"
-    assert result.chunks[0].text == "Body."
+    # Engine-supplied chunk text now passes through clean_excerpt, which
+    # normalizes with a trailing newline (see test_cleaner.py's plan-based
+    # clean_excerpt contract) — this is intentional, not a regression.
+    assert result.chunks[0].text == "Body.\n"
+
+
+FURNISHED_MD = (
+    "# Report\n\nBody paragraph one.\nACME Confidential\n<!-- page-break -->\n"
+    "ACME Confidential\nBody paragraph two.\n<!-- page-break -->\n"
+    "ACME Confidential\nBody paragraph three.\n"
+)
+
+
+class FurnishedChunkEngine(ConversionEngine):
+    name = "markitdown"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    def convert(self, path: Path, options=None) -> EngineOutput:
+        from docsift.core.models import Chunk
+
+        return EngineOutput(
+            markdown=FURNISHED_MD,
+            engine_version="9.9.9",
+            chunks=[
+                Chunk(
+                    chunk_id="c000",
+                    text="ACME Confidential\nBody paragraph one.",
+                    estimated_tokens=99,
+                ),
+                Chunk(chunk_id="c001", text="ACME Confidential", estimated_tokens=99),
+            ],
+        )
+
+
+def test_engine_chunks_are_cleaned_with_the_document_plan(stub_engine, text_file):
+    register_engine("markitdown", FurnishedChunkEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert result.chunks, "the body chunk must survive"
+    joined = "\n".join(chunk.text for chunk in result.chunks)
+    assert "ACME Confidential" not in joined
+    assert "Body paragraph one." in joined
+
+
+def test_chunks_emptied_by_cleaning_are_dropped(stub_engine, text_file):
+    register_engine("markitdown", FurnishedChunkEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert all(chunk.text.strip() for chunk in result.chunks)
+    assert len(result.chunks) == 1
+
+
+def test_cleaned_chunk_tokens_are_recomputed(stub_engine, text_file):
+    register_engine("markitdown", FurnishedChunkEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert result.chunks[0].estimated_tokens != 99
+    assert result.chunks[0].estimated_tokens >= 1

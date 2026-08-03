@@ -17,7 +17,7 @@ from docsift.core.options import ConversionOptions
 from docsift.engines.registry import get_engine
 from docsift.engines.router import SUPPORTED_SUFFIXES, select_engine_name
 from docsift.processing.chunker import chunk_markdown
-from docsift.processing.cleaner import clean_markdown
+from docsift.processing.cleaner import build_clean_plan, clean_excerpt, clean_markdown
 from docsift.processing.token_estimator import estimate_tokens
 from docsift.storage.cache import cache_key, load_cached, store_cached
 
@@ -118,14 +118,29 @@ def convert_document(
     completed = datetime.now(UTC)
 
     raw_markdown = output.markdown
-    markdown, clean_stats = clean_markdown(raw_markdown, options.clean)
+    clean_plan = build_clean_plan(raw_markdown, options.clean)
+    markdown, clean_stats = clean_markdown(raw_markdown, options.clean, plan=clean_plan)
     document_id = f"doc_{source.sha256[:12]}"
 
     if output.chunks is not None:
-        chunks = [
-            chunk.model_copy(update={"chunk_id": f"{document_id}_{chunk.chunk_id}"})
-            for chunk in output.chunks
-        ]
+        # Engine-supplied chunks are built from the engine's own structured
+        # document and never pass through the document-level cleaner, so apply
+        # the same decisions here or they would keep the furniture the Markdown
+        # just lost. A chunk that is nothing but furniture is dropped.
+        chunks = []
+        for chunk in output.chunks:
+            text, _ = clean_excerpt(chunk.text, clean_plan)
+            if not text.strip():
+                continue
+            chunks.append(
+                chunk.model_copy(
+                    update={
+                        "chunk_id": f"{document_id}_{chunk.chunk_id}",
+                        "text": text,
+                        "estimated_tokens": estimate_tokens(text),
+                    }
+                )
+            )
     else:
         chunks = chunk_markdown(markdown, document_id, options.chunk)
 
