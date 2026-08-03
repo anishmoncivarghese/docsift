@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -52,15 +53,34 @@ def store_cached(key: str, result: ConversionResult) -> None:
         raise
 
 
+_ENTRY_NAME = re.compile(r"^[0-9a-f]{64}\.json$")
+
+
 def cache_entries() -> list[Path]:
-    """Every stored conversion result."""
-    return sorted(cache_dir().glob("*.json"))
+    """Every stored conversion result.
+
+    Matched by DocSift's own `{sha256}.json` naming so that a cache directory
+    shared with other files — `DOCSIFT_CACHE_DIR` is a bare env var and may
+    point anywhere — never has unrelated files reported or deleted.
+    """
+    return sorted(entry for entry in cache_dir().glob("*.json") if _ENTRY_NAME.match(entry.name))
 
 
 def cache_stats() -> tuple[int, int]:
-    """(number of cached results, total bytes on disk)."""
-    entries = cache_entries()
-    return len(entries), sum(entry.stat().st_size for entry in entries)
+    """(number of cached results, total bytes on disk).
+
+    Entries that vanish between the listing and the measurement — a concurrent
+    `cache clear`, say — are skipped rather than crashing the command.
+    """
+    count = 0
+    total = 0
+    for entry in cache_entries():
+        try:
+            total += entry.stat().st_size
+        except OSError:
+            continue
+        count += 1
+    return count, total
 
 
 def clear_cache() -> int:

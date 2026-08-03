@@ -137,3 +137,31 @@ def test_artifact_collision_is_warned(counting_engine, tmp_path):
     convert_document(first, output_dir=out)
     result = convert_document(second, output_dir=out)
     assert any(w.code == "artifact_overwritten" for w in result.warnings)
+
+
+def test_clear_cache_ignores_files_docsift_did_not_write(counting_engine, text_file, tmp_path):
+    from docsift.storage.cache import cache_dir, cache_stats, clear_cache
+
+    convert_document(text_file)
+    stranger = cache_dir() / "package-lock.json"
+    stranger.write_text("{}", encoding="utf-8")
+    assert cache_stats()[0] == 1
+    assert clear_cache() == 1
+    assert stranger.exists()
+
+
+def test_cache_stats_survives_entries_vanishing(counting_engine, text_file, monkeypatch):
+    from pathlib import Path
+
+    from docsift.storage import cache as cache_module
+
+    convert_document(text_file)
+    real_entries = cache_module.cache_entries()
+
+    def entries_with_a_ghost() -> list[Path]:
+        return [*real_entries, real_entries[0].with_name("f" * 64 + ".json")]
+
+    monkeypatch.setattr(cache_module, "cache_entries", entries_with_a_ghost)
+    count, size = cache_module.cache_stats()
+    assert count == 1
+    assert size > 0
