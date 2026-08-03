@@ -295,3 +295,31 @@ def test_cleaned_chunk_tokens_are_recomputed(stub_engine, text_file):
         register_engine("markitdown", StubEngine)
     assert result.chunks[0].estimated_tokens != 99
     assert result.chunks[0].estimated_tokens >= 1
+
+
+def test_overlap_warns_when_engine_supplies_chunks(stub_engine, text_file):
+    from docsift.core.options import ChunkOptions, ConversionOptions
+
+    register_engine("markitdown", PrechunkedEngine)
+    try:
+        result = convert_document(
+            text_file, options=ConversionOptions(chunk=ChunkOptions(overlap_tokens=100))
+        )
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert any(w.code == "overlap_not_supported" for w in result.warnings)
+
+
+def test_no_overlap_warning_when_overlap_is_zero(stub_engine, text_file):
+    from docsift.core.options import ChunkOptions, ConversionOptions
+
+    register_engine("markitdown", PrechunkedEngine)
+    try:
+        result = convert_document(
+            text_file, options=ConversionOptions(chunk=ChunkOptions(overlap_tokens=0))
+        )
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert not any(w.code == "overlap_not_supported" for w in result.warnings)

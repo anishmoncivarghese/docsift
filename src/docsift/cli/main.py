@@ -36,7 +36,10 @@ def convert(
     engine: str = typer.Option("auto", help="Engine: auto, docling, or markitdown."),
     output: Path = typer.Option(Path("output"), help="Directory for Markdown and JSON."),
     max_tokens: int = typer.Option(1000, help="Maximum tokens per chunk."),
-    overlap: int = typer.Option(100, help="Token overlap between chunks."),
+    overlap: int = typer.Option(
+        100,
+        help="Token overlap between chunks (ignored when the engine supplies its own chunks).",
+    ),
     keep_image_refs: bool = typer.Option(
         False, "--keep-image-refs", help="Keep image references in the Markdown."
     ),

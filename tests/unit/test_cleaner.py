@@ -306,3 +306,13 @@ def test_plan_furniture_respects_remove_furniture_option():
     cleaned, stats = clean_markdown(NOISY, options=CleanOptions(remove_furniture=False), plan=plan)
     assert "ACME Corp Confidential" in cleaned
     assert stats.furniture_lines_removed == 0
+
+
+def test_first_page_gets_a_marker_when_pages_exist():
+    cleaned, _ = clean_markdown(NOISY)
+    assert cleaned.startswith("<!-- page: 1 -->")
+
+
+def test_no_page_marker_when_document_has_no_page_breaks():
+    cleaned, _ = clean_markdown("# Title\n\nJust one page of text.\n")
+    assert "<!-- page:" not in cleaned

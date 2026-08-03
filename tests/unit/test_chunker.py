@@ -155,3 +155,13 @@ def test_two_line_table_keeps_both_rows():
     rows = ["| K | V |", "| a | b |"]
     parts = _split_table(rows, 1000)
     assert parts == [rows]
+
+
+def test_first_page_content_is_attributed_to_page_one():
+    doc = (
+        "<!-- page: 1 -->\n\n# Report\n\nOpening paragraph on the first page.\n\n"
+        "<!-- page: 2 -->\n\nSecond page paragraph.\n"
+    )
+    chunks = chunk_markdown(doc, "doc_p", ChunkOptions(max_tokens=1000, overlap_tokens=0))
+    assert chunks
+    assert 1 in chunks[0].pages

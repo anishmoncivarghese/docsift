@@ -168,6 +168,13 @@ def convert_document(
                 message=f"cleaning emptied every chunk supplied by {engine_name}",
             )
         )
+    if output.chunks is not None and options.chunk.overlap_tokens > 0:
+        warnings.append(
+            ConversionWarning(
+                code="overlap_not_supported",
+                message=f"--overlap has no effect on chunks supplied by {engine_name}",
+            )
+        )
     result = ConversionResult(
         document_id=document_id,
         source=source,

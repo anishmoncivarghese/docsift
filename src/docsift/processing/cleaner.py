@@ -103,6 +103,11 @@ def _prepare(
                 numbered.append((f"<!-- page: {page} -->", False))
             continue
         numbered.append((line, fenced))
+    if options.keep_page_markers and page > 1:
+        # Page 1 has no preceding break, so without this its content carries no
+        # page attribution at all and the chunker cites it as page 2.
+        numbered.insert(0, ("<!-- page: 1 -->", False))
+        boundary_indices = {idx + 1 for idx in boundary_indices}
     page_count = page
     if numbered:
         boundary_indices.add(0)
