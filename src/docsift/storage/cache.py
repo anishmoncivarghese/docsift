@@ -50,3 +50,26 @@ def store_cached(key: str, result: ConversionResult) -> None:
         handle.close()
         Path(handle.name).unlink(missing_ok=True)
         raise
+
+
+def cache_entries() -> list[Path]:
+    """Every stored conversion result."""
+    return sorted(cache_dir().glob("*.json"))
+
+
+def cache_stats() -> tuple[int, int]:
+    """(number of cached results, total bytes on disk)."""
+    entries = cache_entries()
+    return len(entries), sum(entry.stat().st_size for entry in entries)
+
+
+def clear_cache() -> int:
+    """Delete every cached result. Returns how many were removed."""
+    removed = 0
+    for entry in cache_entries():
+        try:
+            entry.unlink()
+        except OSError:
+            continue
+        removed += 1
+    return removed

@@ -98,3 +98,42 @@ def test_key_varies_with_every_component():
     assert key != cache_key(
         **{**base, "options": ConversionOptions(chunk=ChunkOptions(max_tokens=99))}
     )
+
+
+def test_cache_stats_and_clear(counting_engine, text_file):
+    from docsift.storage.cache import cache_stats, clear_cache
+
+    convert_document(text_file)
+    count, size = cache_stats()
+    assert count == 1
+    assert size > 0
+    assert clear_cache() == 1
+    assert cache_stats() == (0, 0)
+
+
+def test_cache_cli_info_and_clear(counting_engine, text_file):
+    from typer.testing import CliRunner
+
+    from docsift.cli.main import app
+
+    runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
+    convert_document(text_file)
+    info = runner.invoke(app, ["cache", "info"])
+    assert info.exit_code == 0, info.output
+    assert "entries: 1" in info.output
+    cleared = runner.invoke(app, ["cache", "clear"])
+    assert cleared.exit_code == 0, cleared.output
+    assert "removed 1" in cleared.output
+
+
+def test_artifact_collision_is_warned(counting_engine, tmp_path):
+    first = tmp_path / "a" / "report.txt"
+    first.parent.mkdir()
+    first.write_text("first document", encoding="utf-8")
+    second = tmp_path / "b" / "report.txt"
+    second.parent.mkdir()
+    second.write_text("a different document", encoding="utf-8")
+    out = tmp_path / "out"
+    convert_document(first, output_dir=out)
+    result = convert_document(second, output_dir=out)
+    assert any(w.code == "artifact_overwritten" for w in result.warnings)

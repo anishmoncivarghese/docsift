@@ -1,4 +1,5 @@
 import hashlib
+import json
 import mimetypes
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,10 +68,27 @@ def _write_artifacts(result: ConversionResult, path: Path, output_dir: Path | No
         return
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / f"{path.stem}.docsift.json"
+    if json_path.is_file():
+        # Artifacts are named after the source stem, so two same-named files
+        # from different directories collide. Say so rather than replacing
+        # someone's output silently. The stem is a filename, never content.
+        try:
+            existing = json.loads(json_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            existing = {}
+        if existing.get("document_id") not in (None, result.document_id):
+            result.warnings.append(
+                ConversionWarning(
+                    code="artifact_overwritten",
+                    message=(
+                        f"output for '{path.stem}' belonged to a different document "
+                        "and was replaced"
+                    ),
+                )
+            )
     (output_dir / f"{path.stem}.md").write_text(result.document.markdown, encoding="utf-8")
-    (output_dir / f"{path.stem}.docsift.json").write_text(
-        result.model_dump_json(indent=2), encoding="utf-8"
-    )
+    json_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
 
 def convert_document(

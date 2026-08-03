@@ -149,3 +149,26 @@ def compare(
     typer.echo(f"comparison_report: {output / (path.stem + '.compare.md')}")
     if not any(run.success for run in comparison.runs):
         raise typer.Exit(code=1)
+
+
+cache_app = typer.Typer(help="Inspect and clear the conversion cache.", no_args_is_help=True)
+app.add_typer(cache_app, name="cache")
+
+
+@cache_app.command("info")
+def cache_info() -> None:
+    """Show where the cache lives and how much space it uses."""
+    from docsift.storage.cache import cache_dir, cache_stats
+
+    count, size = cache_stats()
+    typer.echo(f"location: {cache_dir()}")
+    typer.echo(f"entries: {count}")
+    typer.echo(f"bytes: {size}")
+
+
+@cache_app.command("clear")
+def cache_clear() -> None:
+    """Delete every cached conversion result."""
+    from docsift.storage.cache import clear_cache
+
+    typer.echo(f"removed {clear_cache()} cached results")
