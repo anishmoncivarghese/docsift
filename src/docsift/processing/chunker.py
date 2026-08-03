@@ -16,6 +16,16 @@ def _tokens(block: dict) -> int:
     return estimate_tokens(_block_text(block))
 
 
+def _joined_tokens(blocks: list[dict]) -> int:
+    """Token estimate of `blocks` as they will actually be emitted: joined with
+    blank lines, not summed per-block. Summing per-block estimates undercounts
+    (or overcounts) relative to tokenizing the real joined text, since the
+    tokenizer doesn't split cleanly at block boundaries."""
+    if not blocks:
+        return 0
+    return estimate_tokens("\n\n".join(_block_text(b) for b in blocks))
+
+
 def _parse_blocks(markdown: str) -> list[dict]:
     """Split into heading/table/text blocks; track page from markers; drop markers."""
     blocks: list[dict] = []
@@ -203,9 +213,7 @@ def chunk_markdown(
             ]
         current = overlap + carried
 
-    running = 0
     for block in blocks:
-        block_tokens = _tokens(block)
         # Keep flushing (and, if needed, dropping a now-stale carried overlap)
         # until `current` can safely accept this block without stacking two
         # already-indivisible pieces (an overlap tail, a carried heading, an
@@ -213,9 +221,16 @@ def chunk_markdown(
         # flush() call only removes one layer at a time — e.g. flushing real
         # content can leave behind an [overlap, carried-heading] pair that is
         # itself still over budget — so this must loop, not run once.
+        #
+        # The over-budget test always measures the actual "\n\n"-joined text
+        # of `current + [block]`, not a sum of per-block token estimates:
+        # summing undercounts (or overcounts) relative to tokenizing the real
+        # joined text, since the tokenizer doesn't split cleanly at block
+        # boundaries. That drift is what let chunks silently exceed
+        # `max_tokens` by up to 5% before this fix.
         while True:
             has_content = any(b["kind"] != "overlap" for b in current)
-            if has_content and running + block_tokens > options.max_tokens:
+            if has_content and _joined_tokens(current + [block]) > options.max_tokens:
                 before = list(current)
                 flush()
                 if current == before:
@@ -229,9 +244,9 @@ def chunk_markdown(
                     # "single indivisible block" exception applies to a run
                     # of headings plus the content that must stay with them).
                     break
-                running = sum(_tokens(b) for b in current)
                 continue
-            if not has_content and current and running + block_tokens > options.max_tokens:
+            over_budget = _joined_tokens(current + [block]) > options.max_tokens
+            if not has_content and current and over_budget:
                 # `current` holds only a carried-over overlap tail (no real
                 # content). Even that overlap alone plus this next block
                 # would blow the budget — carrying an indivisible overlap
@@ -241,9 +256,7 @@ def chunk_markdown(
                 # exception. Drop the stale overlap instead of force-merging
                 # it with the next block.
                 current = []
-                running = 0
             break
         current.append(block)
-        running += block_tokens
     flush(final=True)
     return chunks
