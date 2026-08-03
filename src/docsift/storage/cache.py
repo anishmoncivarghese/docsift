@@ -33,7 +33,7 @@ def load_cached(key: str) -> ConversionResult | None:
         return None
     try:
         return ConversionResult.model_validate_json(entry.read_text(encoding="utf-8"))
-    except ValueError:
+    except (ValueError, OSError):
         return None
 
 

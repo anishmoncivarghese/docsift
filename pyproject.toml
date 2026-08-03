@@ -11,6 +11,15 @@ dependencies = [
   "pydantic>=2.7",
   "tiktoken>=0.8",
 ]
+keywords = ["pdf", "markdown", "docling", "markitdown", "rag", "llm", "document-conversion"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Text Processing :: Markup :: Markdown",
+]
 
 [project.optional-dependencies]
 markitdown = ["markitdown[docx,pptx,xlsx,pdf]>=0.1.1"]
@@ -19,6 +28,11 @@ all = ["docsift[markitdown]", "docsift[docling]"]
 
 [project.scripts]
 docsift = "docsift.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/anishmoncivarghese/docsift"
+Repository = "https://github.com/anishmoncivarghese/docsift"
+Changelog = "https://github.com/anishmoncivarghese/docsift/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [

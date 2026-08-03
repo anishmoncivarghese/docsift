@@ -92,6 +92,7 @@ def test_key_varies_with_every_component():
     )
     key = cache_key(**base)
     assert key != cache_key(**{**base, "source_sha256": "b" * 64})
+    assert key != cache_key(**{**base, "engine_name": "markitdown"})
     assert key != cache_key(**{**base, "engine_version": "2.1"})
     assert key != cache_key(**{**base, "docsift_version": "0.2.0"})
     assert key != cache_key(
