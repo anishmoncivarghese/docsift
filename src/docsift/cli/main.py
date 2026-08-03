@@ -40,6 +40,12 @@ def convert(
     keep_image_refs: bool = typer.Option(
         False, "--keep-image-refs", help="Keep image references in the Markdown."
     ),
+    keep_furniture: bool = typer.Option(
+        False, "--keep-furniture", help="Keep repeated header/footer lines."
+    ),
+    furniture_min_repeats: int = typer.Option(
+        3, help="How many times a line must repeat to count as header/footer furniture."
+    ),
     no_cache: bool = typer.Option(
         False, "--no-cache", help="Convert even if a cached result exists."
     ),
@@ -50,7 +56,11 @@ def convert(
     from docsift.services.conversion_service import convert_document
 
     options = ConversionOptions(
-        clean=CleanOptions(remove_image_refs=not keep_image_refs),
+        clean=CleanOptions(
+            remove_image_refs=not keep_image_refs,
+            remove_furniture=not keep_furniture,
+            furniture_min_repeats=furniture_min_repeats,
+        ),
         chunk=ChunkOptions(max_tokens=max_tokens, overlap_tokens=overlap),
     )
 

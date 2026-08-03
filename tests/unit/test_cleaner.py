@@ -161,6 +161,29 @@ def test_longer_fence_closes_only_on_matching_run():
     assert stats.page_number_lines_removed == 0
 
 
+def test_repeated_body_text_without_pages_is_kept():
+    doc = (
+        "# Contract\n\nClause 1: The parties agree.\nNot applicable\n"
+        "Clause 2: The parties agree.\nNot applicable\n"
+        "Clause 3: The parties agree.\nNot applicable\n"
+    )
+    cleaned, stats = clean_markdown(doc)
+    assert cleaned.count("Not applicable") == 3
+    assert stats.furniture_lines_removed == 0
+
+
+def test_mid_page_repeats_survive_when_pages_exist():
+    body = "Filler line number {n} with enough words to sit mid page here.\n"
+    doc = "# Doc\n\n"
+    for _page in range(3):
+        doc += "Header Line\n" + "".join(body.format(n=i) for i in range(6))
+        doc += "Not applicable\n" + "".join(body.format(n=i + 10) for i in range(6))
+        doc += "<!-- page-break -->\n"
+    cleaned, stats = clean_markdown(doc)
+    assert cleaned.count("Not applicable") == 3
+    assert "Header Line" not in cleaned
+
+
 def test_info_string_line_does_not_close_a_fence():
     doc = (
         "# Markdown Guide\n\n"

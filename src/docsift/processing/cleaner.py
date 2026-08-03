@@ -64,17 +64,32 @@ def clean_markdown(markdown: str, options: CleanOptions | None = None) -> tuple[
 
     page = 1
     numbered: list[tuple[str, bool]] = []
+    # Positions (indices into `numbered`) that sit at a page boundary: where a
+    # page-marker line was emitted, or — when markers are dropped — where the
+    # next page's content begins. Furniture removal only fires near these, plus
+    # the very start/end of the document, since that is where real running
+    # headers and footers live (FR-06). Tracked before markers are dropped so
+    # boundary-adjacency still works with keep_page_markers=False.
+    boundary_indices: set[int] = set()
     for line, fenced in marked:
         if not fenced and line.strip() == PAGE_BREAK:
             page += 1
+            boundary_indices.add(len(numbered))
             if options.keep_page_markers:
                 numbered.append((f"<!-- page: {page} -->", False))
             continue
         numbered.append((line, fenced))
-    marked = numbered
+    page_count = page
+    if numbered:
+        boundary_indices.add(0)
+        boundary_indices.add(len(numbered) - 1)
 
-    kept: list[tuple[str, bool]] = []
-    for line, fenced in marked:
+    indexed: list[tuple[str, bool, int]] = [
+        (line, fenced, idx) for idx, (line, fenced) in enumerate(numbered)
+    ]
+
+    kept: list[tuple[str, bool, int]] = []
+    for line, fenced, idx in indexed:
         stripped = line.strip()
         if not fenced:
             if options.remove_image_refs and _IMAGE_REF.match(stripped):
@@ -83,25 +98,33 @@ def clean_markdown(markdown: str, options: CleanOptions | None = None) -> tuple[
             if stripped and not _is_protected(stripped) and _PAGE_NUMBER.match(stripped):
                 stats.page_number_lines_removed += 1
                 continue
-        kept.append((line, fenced))
-    marked = kept
+        kept.append((line, fenced, idx))
+    indexed = kept
 
-    if options.remove_furniture:
+    if options.remove_furniture and page_count > 1:
+        threshold = max(options.furniture_min_repeats, page_count // 2)
+
+        def _boundary_adjacent(idx: int) -> bool:
+            return any(abs(idx - boundary) <= 3 for boundary in boundary_indices)
+
         candidates = Counter(
             line.strip()
-            for line, fenced in marked
-            if not fenced and 4 <= len(line.strip()) < 80 and not _is_protected(line.strip())
+            for line, fenced, idx in indexed
+            if not fenced
+            and 4 <= len(line.strip()) < 80
+            and not _is_protected(line.strip())
+            and _boundary_adjacent(idx)
         )
-        furniture = {
-            text for text, count in candidates.items() if count >= options.furniture_min_repeats
-        }
+        furniture = {text for text, count in candidates.items() if count >= threshold}
         kept = []
-        for line, fenced in marked:
-            if not fenced and line.strip() in furniture:
+        for line, fenced, idx in indexed:
+            if not fenced and line.strip() in furniture and _boundary_adjacent(idx):
                 stats.furniture_lines_removed += 1
                 continue
-            kept.append((line, fenced))
-        marked = kept
+            kept.append((line, fenced, idx))
+        indexed = kept
+
+    marked = [(line, fenced) for line, fenced, idx in indexed]
 
     deduped: list[tuple[str, bool]] = []
     for line, fenced in marked:

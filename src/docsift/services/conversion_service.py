@@ -128,6 +128,15 @@ def convert_document(
                 message=f"{engine_name} produced no Markdown for '{path.name}'",
             )
         )
+    if clean_stats.furniture_lines_removed > 0:
+        warnings.append(
+            ConversionWarning(
+                code="furniture_removed",
+                message=(
+                    f"removed {clean_stats.furniture_lines_removed} repeated header/footer lines"
+                ),
+            )
+        )
     result = ConversionResult(
         document_id=document_id,
         source=source,
