@@ -197,11 +197,12 @@ def clean_markdown(
     options = options or (plan.options if plan else None) or CleanOptions()
     stats = CleanStats()
     indexed, boundary_indices, page_count = _prepare(markdown, options, stats)
-    furniture = (
-        set(plan.furniture)
-        if plan is not None
-        else _detect_furniture(indexed, boundary_indices, page_count, options)
-    )
+    if not options.remove_furniture:
+        furniture: set[str] = set()
+    elif plan is not None:
+        furniture = set(plan.furniture)
+    else:
+        furniture = _detect_furniture(indexed, boundary_indices, page_count, options)
 
     kept: list[tuple[str, bool]] = []
     for line, fenced, idx in indexed:
@@ -229,6 +230,7 @@ def clean_excerpt(text: str, plan: CleanPlan) -> tuple[str, CleanStats]:
         stripped = line.strip()
         if not fenced:
             if stripped == PAGE_BREAK:
+                # No stat bump: an excerpt has no page structure to renumber.
                 continue
             if options.remove_image_refs and _IMAGE_REF.match(stripped):
                 stats.image_refs_removed += 1

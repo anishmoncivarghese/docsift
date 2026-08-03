@@ -263,3 +263,14 @@ def test_excerpt_with_empty_plan_is_a_near_noop():
     cleaned, stats = clean_excerpt("Alpha.\nBeta.\n", CleanPlan())
     assert cleaned == "Alpha.\nBeta.\n"
     assert stats.furniture_lines_removed == 0
+
+
+def test_plan_furniture_respects_remove_furniture_option():
+    from docsift.core.options import CleanOptions
+    from docsift.processing.cleaner import build_clean_plan
+
+    plan = build_clean_plan(NOISY)
+    assert plan.furniture
+    cleaned, stats = clean_markdown(NOISY, options=CleanOptions(remove_furniture=False), plan=plan)
+    assert "ACME Corp Confidential" in cleaned
+    assert stats.furniture_lines_removed == 0
