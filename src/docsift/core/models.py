@@ -73,6 +73,19 @@ class ConversionResult(BaseModel):
     warnings: list[ConversionWarning] = Field(default_factory=list)
 
 
+class InspectionResult(BaseModel):
+    """What DocSift would do with a file, without converting it."""
+
+    schema_version: str = "1"
+    source: SourceMetadata
+    document_id: str
+    engine: str
+    selection_reason: str
+    engine_available: bool
+    engine_version: str
+    cached: bool = False
+
+
 class EngineRunSummary(BaseModel):
     engine: str
     success: bool

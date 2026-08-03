@@ -88,6 +88,36 @@ def convert(
 
 
 @app.command()
+def inspect(
+    path: Path = typer.Argument(..., help="File to inspect."),
+    engine: str = typer.Option("auto", help="Engine: auto, docling, or markitdown."),
+) -> None:
+    """Show how DocSift would handle a file, without converting it."""
+    from docsift.core.exceptions import DocSiftError
+    from docsift.services.inspection_service import inspect_document
+
+    try:
+        result = inspect_document(path, engine=engine)
+    except DocSiftError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.secho(
+            f"error: unexpected failure: {type(exc).__name__}", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"document_id: {result.document_id}")
+    typer.echo(f"filename: {result.source.filename}")
+    typer.echo(f"media_type: {result.source.media_type}")
+    typer.echo(f"size_bytes: {result.source.size_bytes}")
+    typer.echo(f"sha256: {result.source.sha256}")
+    typer.echo(f"engine: {result.engine} ({result.selection_reason})")
+    typer.echo(f"engine_available: {result.engine_available}")
+    typer.echo(f"engine_version: {result.engine_version}")
+    typer.echo(f"cached: {result.cached}")
+
+
+@app.command()
 def compare(
     path: Path = typer.Argument(..., help="File to run through every engine."),
     output: Path = typer.Option(Path("output"), help="Directory for per-engine and report files."),
