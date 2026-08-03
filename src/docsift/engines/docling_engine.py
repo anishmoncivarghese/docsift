@@ -14,7 +14,12 @@ class DoclingEngine(ConversionEngine):
 
     @classmethod
     def is_available(cls) -> bool:
-        return util.find_spec("docling") is not None
+        try:
+            return util.find_spec("docling") is not None
+        except (ImportError, ValueError):
+            # find_spec raises ValueError if a module named "docling" is already
+            # present in sys.modules without a __spec__ (e.g. a test double).
+            return False
 
     @classmethod
     def version(cls) -> str:
@@ -51,7 +56,7 @@ class DoclingEngine(ConversionEngine):
             page_count=page_count,
             chunks=chunks,
             warnings=warnings,
-            engine_version=metadata.version("docling"),
+            engine_version=self.version(),
         )
 
     def _chunk(self, document: object, chunk_options: ChunkOptions):
