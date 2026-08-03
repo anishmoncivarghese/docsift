@@ -108,33 +108,43 @@ def test_section_path_reports_deepest_context():
     assert chunks[-1].section_path == ["H1", "H2", "H3"]
 
 
+# Long enough that the paragraphs on either side of the fence force the
+# chunker into multiple chunks (89 tokens each) rather than letting the
+# whole ~200-token document sit in a single chunk, where the pre-fix bug
+# would be masked: with only one chunk, section_path is sourced from the
+# first body block (the intro paragraph, parsed before the fence corrupts
+# the heading stack), so a too-small fixture "passes" whether or not the
+# fix is present. See v011-task-3-report.md for the empirical RED/GREEN
+# check against the pre-fix module (commit ed70fab).
+_LONG = "Filler sentence with enough words to consume tokens quickly. " * 8
+
 FENCED_DOC = (
-    "# Guide\n\n"
-    "Intro paragraph about the setup process here.\n\n"
+    "# Guide\n\n" + _LONG + "\n\n"
     "```python\n"
     "# Setup step\n"
     "import os\n"
     "| not | a | table |\n"
-    "```\n\n"
-    "Closing paragraph after the code block.\n"
+    "```\n\n" + _LONG + "\n"
 )
 
 
 def test_fence_comments_are_not_headings():
-    chunks = chunk_markdown(FENCED_DOC, "doc_f")
+    chunks = chunk_markdown(FENCED_DOC, "doc_f", ChunkOptions(max_tokens=120, overlap_tokens=0))
+    assert len(chunks) >= 2
     for chunk in chunks:
         assert "Setup step" not in chunk.section_path
+        assert chunk.section_path in ([], ["Guide"])
 
 
 def test_fenced_block_stays_in_one_chunk():
-    chunks = chunk_markdown(FENCED_DOC, "doc_f", ChunkOptions(max_tokens=40, overlap_tokens=0))
+    chunks = chunk_markdown(FENCED_DOC, "doc_f", ChunkOptions(max_tokens=10, overlap_tokens=0))
     holders = [c for c in chunks if "import os" in c.text]
     assert len(holders) == 1
     assert holders[0].text.count("```") == 2
 
 
 def test_fenced_pipe_line_is_not_treated_as_a_table():
-    chunks = chunk_markdown(FENCED_DOC, "doc_f")
+    chunks = chunk_markdown(FENCED_DOC, "doc_f", ChunkOptions(max_tokens=10, overlap_tokens=0))
     holder = next(c for c in chunks if "| not | a | table |" in c.text)
     assert "import os" in holder.text
 

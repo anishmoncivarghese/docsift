@@ -108,7 +108,12 @@ def _parse_blocks(markdown: str) -> list[dict]:
 def _split_table(rows: list[str], max_tokens: int) -> list[list[str]]:
     if len(rows) < 2:
         # No separator row means this is not a real table; never treat a data
-        # row as a header that gets repeated into every part.
+        # row as a header that gets repeated into every part. Behaviorally a
+        # no-op today — `rows[2:]` is already empty for any `len(rows) <= 2`,
+        # so the `if not body` fallback below already returns `[rows]` in
+        # this case too. Kept as an explicit early return to document the
+        # intent so a future edit to the body-slicing logic below doesn't
+        # silently reintroduce header-duplication for a too-short table.
         return [rows]
     header, body = rows[:2], rows[2:]
     if not body:
