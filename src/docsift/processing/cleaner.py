@@ -31,6 +31,12 @@ class CleanPlan(BaseModel):
     """
 
     furniture: tuple[str, ...] = ()
+    # Furniture whose every document occurrence sat at a page boundary, and which
+    # is therefore safe to strip from derived text that carries no page structure
+    # (an excerpt has no boundaries to gate a strip against, so anything that also
+    # showed up mid-document must be left alone or a real body occurrence would be
+    # deleted).
+    excerpt_furniture: tuple[str, ...] = ()
     options: CleanOptions = Field(default_factory=CleanOptions)
 
 
@@ -141,6 +147,28 @@ def _boundary_adjacent(idx: int, boundary_indices: set[int]) -> bool:
     return any(abs(idx - boundary) <= 3 for boundary in boundary_indices)
 
 
+def _excerpt_safe_furniture(
+    furniture: set[str],
+    indexed: list[tuple[str, bool, int]],
+    boundary_indices: set[int],
+) -> set[str]:
+    """Narrow `furniture` to strings that never occurred away from a boundary.
+
+    `clean_excerpt` has no page structure to gate a strip against, so it can
+    only remove a furniture string wherever it appears. That is only safe when
+    every occurrence in the source document was itself boundary-adjacent — if
+    the string ever showed up mid-document, that occurrence was real body text
+    kept by `clean_markdown`, and an excerpt gives no way to distinguish it
+    from the boundary occurrences.
+    """
+    non_boundary = {
+        line.strip()
+        for line, fenced, idx in indexed
+        if not fenced and not _boundary_adjacent(idx, boundary_indices)
+    }
+    return furniture - non_boundary
+
+
 def _finish(marked: list[tuple[str, bool]], stats: CleanStats) -> str:
     """Collapse consecutive duplicates and blank runs, then join."""
     deduped: list[tuple[str, bool]] = []
@@ -181,7 +209,12 @@ def build_clean_plan(markdown: str, options: CleanOptions | None = None) -> Clea
     options = options or CleanOptions()
     indexed, boundary_indices, page_count = _prepare(markdown, options, CleanStats())
     furniture = _detect_furniture(indexed, boundary_indices, page_count, options)
-    return CleanPlan(furniture=tuple(sorted(furniture)), options=options)
+    excerpt_safe = _excerpt_safe_furniture(furniture, indexed, boundary_indices)
+    return CleanPlan(
+        furniture=tuple(sorted(furniture)),
+        excerpt_furniture=tuple(sorted(excerpt_safe)),
+        options=options,
+    )
 
 
 def clean_markdown(
@@ -216,13 +249,18 @@ def clean_markdown(
 def clean_excerpt(text: str, plan: CleanPlan) -> tuple[str, CleanStats]:
     """Apply a document's cleaning decisions to text derived from it.
 
-    An excerpt carries no page structure, so planned furniture is removed
-    wherever it appears rather than only near page boundaries. Pages are never
-    renumbered — chunks record their pages in metadata.
+    An excerpt carries no page structure, so only `plan.excerpt_furniture` —
+    furniture whose every occurrence in the source document was boundary-
+    adjacent — is removed, and it is removed wherever it appears. Furniture
+    that also occurred away from a boundary (`plan.furniture` minus
+    `plan.excerpt_furniture`) is left alone here: that mid-document occurrence
+    was real body text that `clean_markdown` kept, and an excerpt has no page
+    structure left to tell it apart from the boundary occurrences. Pages are
+    never renumbered — chunks record their pages in metadata.
     """
     options = plan.options
     stats = CleanStats()
-    furniture = set(plan.furniture)
+    furniture = set(plan.excerpt_furniture)
     marked = mark_fences([line.rstrip() for line in text.splitlines()])
 
     kept: list[tuple[str, bool]] = []

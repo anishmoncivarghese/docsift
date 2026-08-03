@@ -265,6 +265,38 @@ def test_excerpt_with_empty_plan_is_a_near_noop():
     assert stats.furniture_lines_removed == 0
 
 
+def test_excerpt_keeps_furniture_text_that_also_appears_as_body():
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    doc = "# Doc\n\n"
+    for _ in range(3):
+        doc += "ACME Confidential\nSome ordinary page body text here.\n<!-- page-break -->\n"
+    # The mid-document occurrence below must sit well away from every page
+    # boundary (start, each page break, end) or it counts as boundary-adjacent
+    # itself and the intended split (furniture but not excerpt-safe) collapses.
+    doc += (
+        "Padding line one.\nPadding line two.\nPadding line three.\nPadding line four.\n"
+        "A paragraph that legitimately says:\nACME Confidential\nand then continues.\n"
+        "Padding line five.\nPadding line six.\nPadding line seven.\nPadding line eight.\n"
+    )
+    plan = build_clean_plan(doc)
+    assert "ACME Confidential" in plan.furniture
+    assert "ACME Confidential" not in plan.excerpt_furniture
+    cleaned, stats = clean_excerpt("Body before.\nACME Confidential\nBody after.\n", plan)
+    assert "ACME Confidential" in cleaned
+    assert stats.furniture_lines_removed == 0
+
+
+def test_excerpt_still_strips_boundary_only_furniture():
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    plan = build_clean_plan(NOISY)
+    assert "ACME Corp Confidential" in plan.excerpt_furniture
+    cleaned, stats = clean_excerpt("Body.\nACME Corp Confidential\nMore.\n", plan)
+    assert "ACME Corp Confidential" not in cleaned
+    assert stats.furniture_lines_removed == 1
+
+
 def test_plan_furniture_respects_remove_furniture_option():
     from docsift.core.options import CleanOptions
     from docsift.processing.cleaner import build_clean_plan

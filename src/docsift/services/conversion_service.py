@@ -161,6 +161,13 @@ def convert_document(
                 ),
             )
         )
+    if output.chunks and not chunks:
+        warnings.append(
+            ConversionWarning(
+                code="all_chunks_empty_after_cleaning",
+                message=f"cleaning emptied every chunk supplied by {engine_name}",
+            )
+        )
     result = ConversionResult(
         document_id=document_id,
         source=source,

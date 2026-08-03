@@ -258,6 +258,34 @@ def test_chunks_emptied_by_cleaning_are_dropped(stub_engine, text_file):
     assert len(result.chunks) == 1
 
 
+class AllFurnitureChunkEngine(ConversionEngine):
+    name = "markitdown"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    def convert(self, path: Path, options=None) -> EngineOutput:
+        from docsift.core.models import Chunk
+
+        return EngineOutput(
+            markdown=FURNISHED_MD,
+            engine_version="9.9.9",
+            chunks=[Chunk(chunk_id="c000", text="ACME Confidential", estimated_tokens=99)],
+        )
+
+
+def test_all_chunks_empty_after_cleaning_warns(stub_engine, text_file):
+    register_engine("markitdown", AllFurnitureChunkEngine)
+    try:
+        result = convert_document(text_file)
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert result.chunks == []
+    assert any(w.code == "all_chunks_empty_after_cleaning" for w in result.warnings)
+
+
 def test_cleaned_chunk_tokens_are_recomputed(stub_engine, text_file):
     register_engine("markitdown", FurnishedChunkEngine)
     try:
