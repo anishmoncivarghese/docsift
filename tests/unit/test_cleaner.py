@@ -124,7 +124,11 @@ def test_fenced_page_number_lines_survive():
 
 
 def test_cleaning_still_works_outside_fences():
-    doc = FENCED + "\nBoilerplate line\nBoilerplate line\n\nBoilerplate line\n"
+    doc = (
+        FENCED + "\nBoilerplate line\n<!-- page-break -->\n"
+        "Boilerplate line\n<!-- page-break -->\n"
+        "Boilerplate line\n"
+    )
     cleaned, stats = clean_markdown(doc)
     assert "Boilerplate line" not in cleaned
     assert cleaned.count("return 1") == 2
