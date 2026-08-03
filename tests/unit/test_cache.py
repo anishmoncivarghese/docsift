@@ -60,6 +60,28 @@ def test_option_change_is_a_cache_miss(counting_engine, text_file):
     assert counting_engine.calls == 2
 
 
+def test_cache_hit_reports_the_current_file_identity(counting_engine, tmp_path):
+    first = tmp_path / "alpha.md"
+    first.write_text("same bytes", encoding="utf-8")
+    second = tmp_path / "beta.txt"
+    second.write_text("same bytes", encoding="utf-8")
+    convert_document(first, engine="markitdown")
+    result = convert_document(second, engine="markitdown")
+    assert result.conversion.cached is True
+    assert result.source.filename == "beta.txt"
+
+
+def test_cache_hit_still_writes_artifacts(counting_engine, text_file, tmp_path):
+    out = tmp_path / "out"
+    convert_document(text_file, output_dir=out)
+    for artifact in out.iterdir():
+        artifact.unlink()
+    result = convert_document(text_file, output_dir=out)
+    assert result.conversion.cached is True
+    assert (out / "note.md").exists()
+    assert (out / "note.docsift.json").exists()
+
+
 def test_key_varies_with_every_component():
     base = dict(
         source_sha256="a" * 64,

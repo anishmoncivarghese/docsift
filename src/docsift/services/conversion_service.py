@@ -93,6 +93,15 @@ def convert_document(
         if cached is not None:
             cached = cached.model_copy(deep=True)
             cached.conversion.cached = True
+            # The cache key is content-addressed (source sha256), not path- or
+            # filename-addressed, so a byte-identical file under a different
+            # name/path hits the same entry. filename/media_type and the
+            # engine-selection reason aren't derived from file content, so they
+            # must reflect *this* request, not whichever file populated the
+            # cache first. duration_ms intentionally stays the original run's
+            # value — it describes how long the actual conversion took.
+            cached.source = source
+            cached.conversion.selection_reason = reason
             _write_artifacts(cached, path, output_dir)
             return cached
 
