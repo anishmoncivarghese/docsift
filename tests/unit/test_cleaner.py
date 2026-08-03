@@ -316,3 +316,18 @@ def test_first_page_gets_a_marker_when_pages_exist():
 def test_no_page_marker_when_document_has_no_page_breaks():
     cleaned, _ = clean_markdown("# Title\n\nJust one page of text.\n")
     assert "<!-- page:" not in cleaned
+
+
+def test_cleaned_document_attributes_first_page_content_to_page_one():
+    from docsift.core.options import ChunkOptions
+    from docsift.processing.chunker import chunk_markdown
+
+    doc = (
+        "# Report\n\nOpening paragraph on the very first page.\n"
+        "<!-- page-break -->\n"
+        "Second page paragraph follows here.\n"
+    )
+    cleaned, _ = clean_markdown(doc)
+    chunks = chunk_markdown(cleaned, "doc_e2e", ChunkOptions(max_tokens=1000, overlap_tokens=0))
+    assert chunks
+    assert 1 in chunks[0].pages
