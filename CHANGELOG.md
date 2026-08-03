@@ -14,4 +14,14 @@ First release.
 - Result caching keyed on file hash, engine version, DocSift version, and options.
 - `docsift compare`: run both engines on one document with a metrics report.
 - CLI: `docsift convert` / `docsift compare` / `--engine` / `--max-tokens` /
-  `--overlap` / `--no-cache`.
+  `--overlap` / `--no-cache` / `--output` / `--keep-image-refs` /
+  `--keep-furniture`.
+
+### Known limitations
+
+- PDF chunks come from Docling's HybridChunker and are built from the raw
+  document, so cleaning (header/footer removal, page-number stripping)
+  applies to the exported Markdown but not to chunk text on that path.
+- `--overlap` has no effect on PDFs chunked by Docling; it applies only to
+  the fallback Markdown chunker.
+- The result cache in `~/.cache/docsift` has no automatic eviction.
