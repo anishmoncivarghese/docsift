@@ -2,6 +2,7 @@ import re
 
 from docsift.core.models import Chunk
 from docsift.core.options import ChunkOptions
+from docsift.processing.cleaner import mark_fences
 from docsift.processing.token_estimator import estimate_tokens
 
 _PAGE_MARKER = re.compile(r"^<!-- page: (\d+) -->$")
@@ -27,13 +28,29 @@ def _joined_tokens(blocks: list[dict]) -> int:
 
 
 def _parse_blocks(markdown: str) -> list[dict]:
-    """Split into heading/table/text blocks; track page from markers; drop markers."""
+    """Split into heading/table/text/fenced blocks; track page from markers; drop markers."""
     blocks: list[dict] = []
     page: int | None = None
     heading_stack: list[tuple[int, str]] = []
     lines = markdown.splitlines()
+    fenced = [flag for _, flag in mark_fences(lines)]
     i = 0
     while i < len(lines):
+        if fenced[i]:
+            # A code block is atomic: its `#` comments are not headings, its
+            # pipes are not table rows, and splitting it would strand a fence.
+            start = i
+            while i < len(lines) and fenced[i]:
+                i += 1
+            blocks.append(
+                {
+                    "kind": "text",
+                    "lines": lines[start:i],
+                    "page": page,
+                    "path": [t for _, t in heading_stack],
+                }
+            )
+            continue
         stripped = lines[i].strip()
         marker = _PAGE_MARKER.match(stripped)
         if marker:
@@ -89,6 +106,10 @@ def _parse_blocks(markdown: str) -> list[dict]:
 
 
 def _split_table(rows: list[str], max_tokens: int) -> list[list[str]]:
+    if len(rows) < 2:
+        # No separator row means this is not a real table; never treat a data
+        # row as a header that gets repeated into every part.
+        return [rows]
     header, body = rows[:2], rows[2:]
     if not body:
         return [rows]

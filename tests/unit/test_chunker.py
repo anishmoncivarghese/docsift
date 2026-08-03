@@ -106,3 +106,42 @@ def test_section_path_reports_deepest_context():
     chunks = chunk_markdown(doc, "doc_n")
     assert chunks
     assert chunks[-1].section_path == ["H1", "H2", "H3"]
+
+
+FENCED_DOC = (
+    "# Guide\n\n"
+    "Intro paragraph about the setup process here.\n\n"
+    "```python\n"
+    "# Setup step\n"
+    "import os\n"
+    "| not | a | table |\n"
+    "```\n\n"
+    "Closing paragraph after the code block.\n"
+)
+
+
+def test_fence_comments_are_not_headings():
+    chunks = chunk_markdown(FENCED_DOC, "doc_f")
+    for chunk in chunks:
+        assert "Setup step" not in chunk.section_path
+
+
+def test_fenced_block_stays_in_one_chunk():
+    chunks = chunk_markdown(FENCED_DOC, "doc_f", ChunkOptions(max_tokens=40, overlap_tokens=0))
+    holders = [c for c in chunks if "import os" in c.text]
+    assert len(holders) == 1
+    assert holders[0].text.count("```") == 2
+
+
+def test_fenced_pipe_line_is_not_treated_as_a_table():
+    chunks = chunk_markdown(FENCED_DOC, "doc_f")
+    holder = next(c for c in chunks if "| not | a | table |" in c.text)
+    assert "import os" in holder.text
+
+
+def test_two_line_table_keeps_both_rows():
+    from docsift.processing.chunker import _split_table
+
+    rows = ["| K | V |", "| a | b |"]
+    parts = _split_table(rows, 1000)
+    assert parts == [rows]
