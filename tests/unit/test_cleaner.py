@@ -327,10 +327,7 @@ def test_no_page_marker_when_document_has_no_page_breaks():
 def test_excerpt_never_removes_lines_the_document_kept():
     from docsift.processing.cleaner import CleanPlan, clean_excerpt
 
-    fragment = (
-        "connection reset by peer\nconnection reset by peer\n"
-        "        }\n        }\n0\n1\n"
-    )
+    fragment = "connection reset by peer\nconnection reset by peer\n        }\n        }\n0\n1\n"
     cleaned, stats = clean_excerpt(fragment, CleanPlan())
     assert cleaned.count("connection reset by peer") == 2
     assert cleaned.count("        }") == 2
