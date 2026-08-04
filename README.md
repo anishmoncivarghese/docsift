@@ -6,7 +6,7 @@ DocSift converts PDFs and Office documents into clean, structured, AI-ready
 Markdown and JSON — locally, with no cloud APIs. Docling handles PDFs;
 MarkItDown handles the breadth formats; both sit behind one interface.
 
-**v0.1.0**
+**v0.1.1**
 
 ## Install
 
@@ -30,6 +30,9 @@ For local development from a clone:
     docsift --version
     docsift compare report.pdf
     docsift compare report.pdf --output ./comparison
+    docsift inspect report.pdf
+    docsift cache info
+    docsift cache clear
 
 `compare` runs every engine on the same document and writes
 `<name>.compare.json` (machine-readable metrics) and `<name>.compare.md`
@@ -50,16 +53,18 @@ references) and splits it into token-budgeted chunks with heading context:
 Results are cached in `~/.cache/docsift` (override with `DOCSIFT_CACHE_DIR`);
 an unchanged file with unchanged settings returns instantly.
 
-## Known limitations in 0.1.0
+## Known limitations
 
-- PDF chunks come from Docling's HybridChunker and are built from the raw
-  document, so the cleaning stages (header/footer removal, page-number
-  stripping) apply to the exported Markdown but **not** to the chunk text on
-  that path.
-- `--overlap` has no effect on PDFs chunked by Docling; it applies to the
-  fallback Markdown chunker used for other file types.
-- The result cache in `~/.cache/docsift` has no automatic eviction; delete
-  the directory to reclaim space.
+- `--overlap` applies to the fallback Markdown chunker only. Docling supplies
+  its own chunks for PDFs, and DocSift warns when the option cannot take effect.
+- Cleaning removes little from Docling-parsed PDFs, because Docling already
+  drops page headers and footers using its layout model. The cleaning stages
+  earn their keep on MarkItDown output (Word, HTML, spreadsheets).
+- The result cache in `~/.cache/docsift` has no automatic eviction. Use
+  `docsift cache info` and `docsift cache clear` to manage it.
+- A GFM table written without a leading `|` is not recognised as a table and
+  its rows are not protected from de-duplication. Both bundled engines emit
+  pipe-prefixed tables, so this affects hand-written Markdown only.
 
 ## License
 
