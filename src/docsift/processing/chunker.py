@@ -2,7 +2,7 @@ import re
 
 from docsift.core.models import Chunk
 from docsift.core.options import ChunkOptions
-from docsift.processing.cleaner import mark_fences
+from docsift.processing.cleaner import mark_fences_with_state
 from docsift.processing.token_estimator import estimate_tokens
 
 _PAGE_MARKER = re.compile(r"^<!-- page: (\d+) -->$")
@@ -33,7 +33,17 @@ def _parse_blocks(markdown: str) -> list[dict]:
     page: int | None = None
     heading_stack: list[tuple[int, str]] = []
     lines = markdown.splitlines()
-    fenced = [flag for _, flag in mark_fences(lines)]
+    marked, unclosed_index = mark_fences_with_state(lines)
+    fenced = [flag for _, flag in marked]
+    if unclosed_index is not None:
+        # An opening fence with no closer runs to EOF per CommonMark — correct
+        # for the cleaner, but fatal here: treating the entire tail as one
+        # atomic block would swallow every heading, table and page marker
+        # after it into a single indivisible chunk. Fall back to normal
+        # parsing for the unclosed region so the rest of the document stays
+        # navigable; the stray fence marker itself just becomes ordinary text.
+        for idx in range(unclosed_index, len(fenced)):
+            fenced[idx] = False
     i = 0
     while i < len(lines):
         if fenced[i]:

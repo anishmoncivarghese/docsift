@@ -55,18 +55,17 @@ def _is_protected(stripped: str) -> bool:
     )
 
 
-def mark_fences(lines: list[str]) -> list[tuple[str, bool]]:
-    """Pair each line with True when it delimits or lives inside a fenced code block.
+def mark_fences_with_state(lines: list[str]) -> tuple[list[tuple[str, bool]], int | None]:
+    """As `mark_fences`, plus the index of an opening fence that never closed.
 
-    Code samples and log excerpts legitimately contain repeated lines; every
-    cleaning stage skips fenced content so it is never altered. Per CommonMark,
-    a fence closes only on the same character with a run at least as long as the
-    opener, so a `~~~` line inside a ``` block stays content rather than closing
-    it, and a closing fence may not carry an info string.
+    The cleaner treats an unterminated fence as running to EOF (CommonMark), but
+    the chunker must not swallow the rest of the document into one atomic block,
+    so it needs to know where the unclosed region starts.
     """
     marked: list[tuple[str, bool]] = []
     opener: tuple[str, int] | None = None
-    for line in lines:
+    opener_index: int | None = None
+    for idx, line in enumerate(lines):
         stripped = line.strip()
         match = _FENCE.match(stripped)
         if match:
@@ -74,11 +73,31 @@ def mark_fences(lines: list[str]) -> list[tuple[str, bool]]:
             trailing = stripped[len(run) :].strip()
             if opener is None:
                 opener = (run[0], len(run))
+                opener_index = idx
             elif run[0] == opener[0] and len(run) >= opener[1] and not trailing:
                 opener = None
+                opener_index = None
             marked.append((line, True))
             continue
         marked.append((line, opener is not None))
+    return marked, opener_index
+
+
+def mark_fences(lines: list[str]) -> list[tuple[str, bool]]:
+    """Pair each line with True when it delimits or lives inside a fenced code block.
+
+    Code samples and log excerpts legitimately contain repeated lines; every
+    cleaning stage skips fenced content so it is never altered. Per CommonMark,
+    a fence closes only on the same character with a run at least as long as the
+    opener, so a `~~~` line inside a ``` block stays content rather than closing
+    it, and a closing fence may not carry an info string. An unterminated fence
+    (no closer at all) therefore runs to EOF — correct for the cleaner, whose
+    fence exemption only needs to know "inside a fence or not"; the chunker
+    needs more (see `mark_fences_with_state`), since treating the rest of the
+    document as one atomic block would swallow every heading, table and page
+    marker after the unclosed fence.
+    """
+    marked, _ = mark_fences_with_state(lines)
     return marked
 
 

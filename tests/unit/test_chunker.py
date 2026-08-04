@@ -165,3 +165,24 @@ def test_first_page_content_is_attributed_to_page_one():
     chunks = chunk_markdown(doc, "doc_p", ChunkOptions(max_tokens=1000, overlap_tokens=0))
     assert chunks
     assert 1 in chunks[0].pages
+
+
+def test_unclosed_fence_does_not_swallow_the_document():
+    doc = (
+        "# Title\n\nIntro line one.\n\n```\n\n<!-- page: 2 -->\n\n"
+        "# Section Two\n\nSecond section body text here.\n\n"
+        "# Section Three\n\nThird section body text here.\n"
+    )
+    chunks = chunk_markdown(doc, "doc_u", ChunkOptions(max_tokens=100, overlap_tokens=0))
+    # This document is only ~35 estimated tokens, so once the fix correctly
+    # re-parses headings/markers after the unclosed fence, it legitimately
+    # fits in a single chunk — section_path only reports one chunk's path, so
+    # "later sections are reachable" is checked directly against chunk text
+    # rather than via a set of distinct section_path values.
+    joined = "\n".join(chunk.text for chunk in chunks)
+    assert "Section Two" in joined
+    assert "Second section body text here." in joined
+    assert "Section Three" in joined
+    assert "Third section body text here." in joined
+    assert all("<!-- page:" not in chunk.text for chunk in chunks)
+    assert any(2 in chunk.pages for chunk in chunks)
