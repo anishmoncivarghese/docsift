@@ -151,7 +151,14 @@ def test_clear_cache_ignores_files_docsift_did_not_write(counting_engine, text_f
 
 
 def test_clear_cache_ignores_a_newline_suffixed_entry_name(counting_engine, text_file):
-    from docsift.storage.cache import cache_dir, cache_stats, clear_cache
+    from docsift.storage.cache import _ENTRY_NAME, cache_dir, cache_stats, clear_cache
+
+    # The regex is the guard that matters: `$` would accept a trailing newline,
+    # `fullmatch` does not. Asserted directly because the end-to-end path below
+    # cannot reach it — `cache_entries()` globs `*.json` first, and glob already
+    # excludes a name ending in `.json\n`, so the on-disk case passes either way.
+    assert _ENTRY_NAME.fullmatch("f" * 64 + ".json") is not None
+    assert _ENTRY_NAME.fullmatch("f" * 64 + ".json\n") is None
 
     convert_document(text_file)
     stranger = cache_dir() / ("f" * 64 + ".json\n")
