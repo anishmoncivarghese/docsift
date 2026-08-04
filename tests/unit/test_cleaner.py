@@ -236,12 +236,18 @@ def test_excerpt_strips_planned_furniture_anywhere():
 
 
 def test_excerpt_strips_page_numbers_and_image_refs():
+    # Fixture is rebased onto text NOISY itself removed (via
+    # CleanPlan.removed_lines) rather than an independently invented page
+    # number / image ref, since clean_excerpt is now plan-driven: it may only
+    # remove a line the document-level clean already removed (see FIX 1).
+    # "12" and "![logo](logo.png)" are exactly the page-number and image-ref
+    # lines build_clean_plan(NOISY) recorded as removed.
     from docsift.processing.cleaner import build_clean_plan, clean_excerpt
 
     plan = build_clean_plan(NOISY)
-    cleaned, stats = clean_excerpt("Body.\n7\n![x](y.png)\nMore.\n", plan)
-    assert "\n7\n" not in cleaned
-    assert "![x]" not in cleaned
+    cleaned, stats = clean_excerpt("Body.\n12\n![logo](logo.png)\nMore.\n", plan)
+    assert "\n12\n" not in cleaned
+    assert "![logo]" not in cleaned
     assert stats.page_number_lines_removed == 1
     assert stats.image_refs_removed == 1
 
@@ -316,6 +322,32 @@ def test_first_page_gets_a_marker_when_pages_exist():
 def test_no_page_marker_when_document_has_no_page_breaks():
     cleaned, _ = clean_markdown("# Title\n\nJust one page of text.\n")
     assert "<!-- page:" not in cleaned
+
+
+def test_excerpt_never_removes_lines_the_document_kept():
+    from docsift.processing.cleaner import CleanPlan, clean_excerpt
+
+    fragment = (
+        "connection reset by peer\nconnection reset by peer\n"
+        "        }\n        }\n0\n1\n"
+    )
+    cleaned, stats = clean_excerpt(fragment, CleanPlan())
+    assert cleaned.count("connection reset by peer") == 2
+    assert cleaned.count("        }") == 2
+    assert "0" in cleaned
+    assert "1" in cleaned
+    assert stats.duplicate_lines_removed == 0
+    assert stats.page_number_lines_removed == 0
+
+
+def test_excerpt_keeps_code_lines_that_look_like_page_numbers():
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    doc = "# Guide\n\n```\n42\n42\n```\n\nBody paragraph one.\n"
+    plan = build_clean_plan(doc)
+    cleaned, stats = clean_excerpt("42\n42\n", plan)
+    assert cleaned.count("42") == 2
+    assert stats.page_number_lines_removed == 0
 
 
 def test_cleaned_document_attributes_first_page_content_to_page_one():

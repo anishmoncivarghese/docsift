@@ -37,6 +37,11 @@ class CleanPlan(BaseModel):
     # showed up mid-document must be left alone or a real body occurrence would be
     # deleted).
     excerpt_furniture: tuple[str, ...] = ()
+    # The exact line strings the document-level clean removed as page numbers or
+    # image references, excluding any string that also occurs inside a fence or
+    # as a protected line anywhere in the document — so a chunk can never lose a
+    # line the Markdown keeps.
+    removed_lines: tuple[str, ...] = ()
     options: CleanOptions = Field(default_factory=CleanOptions)
 
 
@@ -79,12 +84,13 @@ def mark_fences(lines: list[str]) -> list[tuple[str, bool]]:
 
 def _prepare(
     markdown: str, options: CleanOptions, stats: CleanStats
-) -> tuple[list[tuple[str, bool, int]], set[int], int]:
+) -> tuple[list[tuple[str, bool, int]], set[int], int, set[str]]:
     """Fence-mark, renumber pages, drop image refs and page numbers.
 
     Returns the surviving lines (each carrying its fenced flag and its index in
-    the page-renumbered document), the indices that sit at a page boundary, and
-    the page count.
+    the page-renumbered document), the indices that sit at a page boundary, the
+    page count, and the stripped text of every line dropped as an image ref or
+    page number (for `CleanPlan.removed_lines`).
     """
     marked = mark_fences([line.rstrip() for line in markdown.splitlines()])
 
@@ -114,17 +120,20 @@ def _prepare(
         boundary_indices.add(len(numbered) - 1)
 
     kept: list[tuple[str, bool, int]] = []
+    removed: set[str] = set()
     for idx, (line, fenced) in enumerate(numbered):
         stripped = line.strip()
         if not fenced:
             if options.remove_image_refs and _IMAGE_REF.match(stripped):
                 stats.image_refs_removed += 1
+                removed.add(stripped)
                 continue
             if stripped and not _is_protected(stripped) and _PAGE_NUMBER.match(stripped):
                 stats.page_number_lines_removed += 1
+                removed.add(stripped)
                 continue
         kept.append((line, fenced, idx))
-    return kept, boundary_indices, page_count
+    return kept, boundary_indices, page_count, removed
 
 
 def _detect_furniture(
@@ -174,8 +183,10 @@ def _excerpt_safe_furniture(
     return furniture - non_boundary
 
 
-def _finish(marked: list[tuple[str, bool]], stats: CleanStats) -> str:
-    """Collapse consecutive duplicates and blank runs, then join."""
+def _dedupe_consecutive(
+    marked: list[tuple[str, bool]], stats: CleanStats
+) -> list[tuple[str, bool]]:
+    """Collapse consecutive duplicate lines outside fences."""
     deduped: list[tuple[str, bool]] = []
     for line, fenced in marked:
         stripped = line.strip()
@@ -190,9 +201,13 @@ def _finish(marked: list[tuple[str, bool]], stats: CleanStats) -> str:
             stats.duplicate_lines_removed += 1
             continue
         deduped.append((line, fenced))
+    return deduped
 
+
+def _collapse_blank_runs(marked: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
+    """Collapse consecutive blank lines outside fences and trim leading/trailing blanks."""
     collapsed: list[tuple[str, bool]] = []
-    for line, fenced in deduped:
+    for line, fenced in marked:
         if (
             not fenced
             and not line.strip()
@@ -206,18 +221,39 @@ def _finish(marked: list[tuple[str, bool]], stats: CleanStats) -> str:
         collapsed.pop(0)
     while collapsed and not collapsed[-1][0].strip():
         collapsed.pop()
+    return collapsed
+
+
+def _finish(marked: list[tuple[str, bool]], stats: CleanStats) -> str:
+    """Collapse consecutive duplicates and blank runs, then join."""
+    deduped = _dedupe_consecutive(marked, stats)
+    collapsed = _collapse_blank_runs(deduped)
     return "\n".join(line for line, _ in collapsed) + "\n"
 
 
 def build_clean_plan(markdown: str, options: CleanOptions | None = None) -> CleanPlan:
     """Decide what to strip, using the whole document as context."""
     options = options or CleanOptions()
-    indexed, boundary_indices, page_count = _prepare(markdown, options, CleanStats())
+    indexed, boundary_indices, page_count, removed = _prepare(markdown, options, CleanStats())
     furniture = _detect_furniture(indexed, boundary_indices, page_count, options)
     excerpt_safe = _excerpt_safe_furniture(furniture, indexed, boundary_indices)
+
+    # A removed page-number/image-ref string is only safe to strip from a chunk
+    # fragment wherever it appears if the document never also kept that exact
+    # string somewhere a chunk fragment couldn't tell apart from the removed
+    # occurrence — inside a fence (fragments can lose fence context entirely,
+    # see clean_excerpt's docstring) or as a protected line (heading/table/list/
+    # page marker, which cleaning never touches).
+    unsafe = {
+        line.strip()
+        for line, fenced in mark_fences([ln.rstrip() for ln in markdown.splitlines()])
+        if fenced or _is_protected(line.strip())
+    }
+    removed_lines = removed - unsafe
     return CleanPlan(
         furniture=tuple(sorted(furniture)),
         excerpt_furniture=tuple(sorted(excerpt_safe)),
+        removed_lines=tuple(sorted(removed_lines)),
         options=options,
     )
 
@@ -234,7 +270,7 @@ def clean_markdown(
     """
     options = options or (plan.options if plan else None) or CleanOptions()
     stats = CleanStats()
-    indexed, boundary_indices, page_count = _prepare(markdown, options, stats)
+    indexed, boundary_indices, page_count, _removed = _prepare(markdown, options, stats)
     if not options.remove_furniture:
         furniture: set[str] = set()
     elif plan is not None:
@@ -254,18 +290,33 @@ def clean_markdown(
 def clean_excerpt(text: str, plan: CleanPlan) -> tuple[str, CleanStats]:
     """Apply a document's cleaning decisions to text derived from it.
 
-    An excerpt carries no page structure, so only `plan.excerpt_furniture` —
-    furniture whose every occurrence in the source document was boundary-
-    adjacent — is removed, and it is removed wherever it appears. Furniture
-    that also occurred away from a boundary (`plan.furniture` minus
-    `plan.excerpt_furniture`) is left alone here: that mid-document occurrence
-    was real body text that `clean_markdown` kept, and an excerpt has no page
-    structure left to tell it apart from the boundary occurrences. Pages are
-    never renumbered — chunks record their pages in metadata.
+    Invariant: `clean_excerpt` may remove a line ONLY if the document-level
+    clean already removed that exact line from the document. It never makes
+    an independent removal decision.
+
+    A chunk is not guaranteed to arrive with intact Markdown structure —
+    Docling's `HybridChunker` can split an oversized item mid-fence, so an
+    interior fragment of a long code/log block may carry no fence characters
+    at all. Rule-based cleaning (regexes, consecutive-duplicate dedupe) fired
+    on such a fragment would delete lines the document's own Markdown keeps
+    intact, which is strictly worse than a chunk repeating a line. So this
+    function is plan-driven, not rule-driven: it removes only
+    - lines whose stripped text is in `plan.excerpt_furniture` (furniture
+      whose every document occurrence was boundary-adjacent, so it is safe to
+      strip wherever it appears in an excerpt with no page structure of its
+      own), and
+    - lines whose stripped text is in `plan.removed_lines` (page-number/
+      image-ref lines the document-level clean removed, already excluding
+      anything that also occurs inside a fence or as a protected line
+      elsewhere in the document — see `build_clean_plan`),
+    plus bare `PAGE_BREAK` marker lines (pages are never renumbered here;
+    chunks record their pages in metadata). The fence exemption below is
+    belt-and-braces: `plan.removed_lines` and `plan.excerpt_furniture` should
+    already exclude fenced strings, but content inside a fence is never
+    touched regardless.
     """
-    options = plan.options
     stats = CleanStats()
-    furniture = set(plan.excerpt_furniture)
+    removable = set(plan.excerpt_furniture) | set(plan.removed_lines)
     marked = mark_fences([line.rstrip() for line in text.splitlines()])
 
     kept: list[tuple[str, bool]] = []
@@ -275,14 +326,16 @@ def clean_excerpt(text: str, plan: CleanPlan) -> tuple[str, CleanStats]:
             if stripped == PAGE_BREAK:
                 # No stat bump: an excerpt has no page structure to renumber.
                 continue
-            if options.remove_image_refs and _IMAGE_REF.match(stripped):
-                stats.image_refs_removed += 1
-                continue
-            if stripped and not _is_protected(stripped) and _PAGE_NUMBER.match(stripped):
-                stats.page_number_lines_removed += 1
-                continue
-            if stripped in furniture:
-                stats.furniture_lines_removed += 1
+            if stripped in removable:
+                if stripped in plan.excerpt_furniture:
+                    stats.furniture_lines_removed += 1
+                elif _PAGE_NUMBER.match(stripped):
+                    stats.page_number_lines_removed += 1
+                elif _IMAGE_REF.match(stripped):
+                    stats.image_refs_removed += 1
+                else:
+                    stats.furniture_lines_removed += 1
                 continue
         kept.append((line, fenced))
-    return _finish(kept, stats), stats
+    collapsed = _collapse_blank_runs(kept)
+    return "\n".join(line for line, _ in collapsed) + "\n", stats
