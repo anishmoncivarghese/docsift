@@ -11,6 +11,7 @@ _PAGE_NUMBER = re.compile(r"^(page\s+)?\d+(\s+of\s+\d+)?$", re.IGNORECASE)
 _IMAGE_REF = re.compile(r"^!\[[^\]]*\]\([^)]*\)$")
 _LIST_ITEM = re.compile(r"^[-*+] |^\d+[.)] ")
 _FENCE = re.compile(r"^(`{3,}|~{3,})")
+_HEADING_LINE = re.compile(r"^#{1,6}\s+(.*)$")
 
 
 class CleanStats(BaseModel):
@@ -256,6 +257,21 @@ def build_clean_plan(markdown: str, options: CleanOptions | None = None) -> Clea
     indexed, boundary_indices, page_count, removed = _prepare(markdown, options, CleanStats())
     furniture = _detect_furniture(indexed, boundary_indices, page_count, options)
     excerpt_safe = _excerpt_safe_furniture(furniture, indexed, boundary_indices)
+
+    # Docling's contextualize() prepends a chunk's heading path as plain,
+    # unprefixed lines. When a running header repeats a section title, that
+    # title also qualifies as furniture — but stripping it from a chunk would
+    # delete exactly the context contextualize() exists to add. A string that
+    # also occurs as a heading's title text anywhere in the document is never
+    # excerpt-safe, even though it may still be safe to strip from the
+    # Markdown itself (where the real heading line, prefixed with `#`, is
+    # protected and untouched).
+    heading_texts = {
+        match.group(1).strip()
+        for line in markdown.splitlines()
+        if (match := _HEADING_LINE.match(line.strip()))
+    }
+    excerpt_safe -= heading_texts
 
     # A removed page-number/image-ref string is only safe to strip from a chunk
     # fragment wherever it appears if the document never also kept that exact

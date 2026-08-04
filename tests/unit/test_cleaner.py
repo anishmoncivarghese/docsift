@@ -350,6 +350,31 @@ def test_excerpt_keeps_code_lines_that_look_like_page_numbers():
     assert stats.page_number_lines_removed == 0
 
 
+def test_excerpt_keeps_plain_text_that_matches_a_document_heading():
+    # Docling's contextualize() prepends a chunk's heading text as a plain,
+    # unprefixed line. If that text also repeats as a running header (and so
+    # qualifies as furniture), it must not be stripped from the excerpt or the
+    # heading-context line contextualize() added would be deleted right back
+    # out, even though the document's actual `# Quarterly Report` heading
+    # line stays protected and untouched in the Markdown itself.
+    from docsift.processing.cleaner import build_clean_plan, clean_excerpt
+
+    doc = (
+        "# Quarterly Report\n\n"
+        "Quarterly Report\n<!-- page-break -->\n"
+        "Quarterly Report\n\n"
+        "Body text on page two.\n<!-- page-break -->\n"
+        "Quarterly Report\n\n"
+        "Body text on page three.\n"
+    )
+    plan = build_clean_plan(doc)
+    assert "Quarterly Report" in plan.furniture
+    assert "Quarterly Report" not in plan.excerpt_furniture
+    cleaned, stats = clean_excerpt("Quarterly Report\nBody text of a chunk.\n", plan)
+    assert "Quarterly Report" in cleaned
+    assert stats.furniture_lines_removed == 0
+
+
 def test_cleaned_document_attributes_first_page_content_to_page_one():
     from docsift.core.options import ChunkOptions
     from docsift.processing.chunker import chunk_markdown
