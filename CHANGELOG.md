@@ -5,9 +5,9 @@
 Closes the limitations documented in 0.1.0.
 
 - Cleaning decisions now apply to engine-supplied chunks, so chunk text from
-  Docling-parsed PDFs no longer keeps the headers, footers, page numbers and
-  image references stripped from the Markdown. Chunks left empty by cleaning
-  are dropped and token counts are recomputed.
+  Docling-parsed PDFs no longer keeps the headers, footers and page numbers
+  stripped from the Markdown. Chunks left empty by cleaning are dropped and
+  token counts are recomputed.
 - `--overlap` now emits a warning when the engine supplies its own chunks and
   the option cannot take effect, instead of being silently ignored.
 - The chunker treats fenced code blocks as atomic: a `#` comment inside a code

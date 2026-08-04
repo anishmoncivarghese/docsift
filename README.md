@@ -63,8 +63,9 @@ an unchanged file with unchanged settings returns instantly.
 - The result cache in `~/.cache/docsift` has no automatic eviction. Use
   `docsift cache info` and `docsift cache clear` to manage it.
 - A GFM table written without a leading `|` is not recognised as a table and
-  its rows are not protected from de-duplication. Both bundled engines emit
-  pipe-prefixed tables, so this affects hand-written Markdown only.
+  its rows are not protected from de-duplication. This affects hand-written
+  Markdown, and table text inside Docling-supplied chunks, which is
+  serialized as triplets rather than pipes.
 
 ## License
 
