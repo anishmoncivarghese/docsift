@@ -86,6 +86,17 @@ class InspectionResult(BaseModel):
     cached: bool = False
 
 
+class JobRecord(BaseModel):
+    """State of one asynchronous conversion job."""
+
+    job_id: str
+    status: str
+    document_id: str | None = None
+    error: str | None = None
+    created_at: str
+    updated_at: str
+
+
 class EngineRunSummary(BaseModel):
     engine: str
     success: bool
