@@ -107,3 +107,64 @@ def test_startup_fails_jobs_left_behind_by_a_dead_process():
     record = job_service.get("job_orphan")
     assert record.status == "failed"
     assert record.error == "interrupted"
+
+
+def test_submit_after_shutdown_raises_a_domain_error(upload):
+    from docsift.core.exceptions import ServiceUnavailableError
+
+    job_service.shutdown()
+    with pytest.raises(ServiceUnavailableError):
+        job_service.submit(upload, "upload.txt")
+
+
+def test_concurrent_submit_and_shutdown_never_leaks_a_runtime_error(tmp_path):
+    import threading
+
+    from docsift.core.exceptions import ServiceUnavailableError
+
+    register_engine("markitdown", OkEngine)
+    errors: list[BaseException] = []
+
+    def submitter() -> None:
+        for index in range(20):
+            source = tmp_path / f"racer-{threading.get_ident()}-{index}.txt"
+            source.write_text("hello world", encoding="utf-8")
+            try:
+                job_service.submit(source, source.name)
+            except ServiceUnavailableError:
+                pass
+            except BaseException as exc:  # noqa: BLE001 - the point of the test
+                errors.append(exc)
+
+    threads = [threading.Thread(target=submitter) for _ in range(6)]
+    try:
+        for thread in threads:
+            thread.start()
+        # Give the submitter threads a chance to actually get scheduled and
+        # start racing before we shut down. Without this, `shutdown()` below
+        # tends to run before any thread has been scheduled by the OS, finds
+        # `_executor is None`, and no-ops -- masking the race instead of
+        # exercising it.
+        time.sleep(0.002)
+        job_service.shutdown()
+        for thread in threads:
+            thread.join(timeout=30)
+    finally:
+        unregister_engine("markitdown")
+    assert errors == [], [type(e).__name__ for e in errors]
+
+
+def test_a_worker_that_crashes_in_bookkeeping_does_not_strand_the_job(upload, monkeypatch):
+    from docsift.services import job_service as module
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("bookkeeping is broken")
+
+    register_engine("markitdown", OkEngine)
+    monkeypatch.setattr(module, "_run", explode)
+    try:
+        job_id, _ = job_service.submit(upload, "upload.txt")
+        assert _await_job(job_id) == "failed"
+    finally:
+        unregister_engine("markitdown")
+    assert job_service.get(job_id).error == "RuntimeError"

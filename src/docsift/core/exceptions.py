@@ -12,3 +12,7 @@ class EngineNotAvailableError(DocSiftError):
 
 class ConversionFailedError(DocSiftError):
     """The engine raised while converting the document."""
+
+
+class ServiceUnavailableError(DocSiftError):
+    """The service is shutting down and cannot accept new work."""

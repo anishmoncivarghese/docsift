@@ -1,18 +1,23 @@
+import contextlib
 import hashlib
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
 
 from docsift.core.config import get_settings
-from docsift.core.exceptions import DocSiftError
+from docsift.core.exceptions import DocSiftError, ServiceUnavailableError
 from docsift.core.models import JobRecord
 from docsift.core.options import ConversionOptions
 from docsift.storage import database, documents
 
 _executor: ThreadPoolExecutor | None = None
+_executor_lock = threading.Lock()
+_shutting_down = False
 
 
 def _pool() -> ThreadPoolExecutor:
+    """Build (or reuse) the executor. Callers must already hold `_executor_lock`."""
     global _executor
     if _executor is None:
         _executor = ThreadPoolExecutor(
@@ -23,10 +28,13 @@ def _pool() -> ThreadPoolExecutor:
 
 def reset_for_tests() -> None:
     """Drop the executor so the next submit builds one from current settings."""
-    global _executor
-    if _executor is not None:
-        _executor.shutdown(wait=True)
+    global _executor, _shutting_down
+    with _executor_lock:
+        executor = _executor
         _executor = None
+        _shutting_down = False
+    if executor is not None:
+        executor.shutdown(wait=True)
 
 
 def startup() -> None:
@@ -36,10 +44,16 @@ def startup() -> None:
 
 
 def shutdown() -> None:
-    global _executor
-    if _executor is not None:
-        _executor.shutdown(wait=True)
+    global _executor, _shutting_down
+    with _executor_lock:
+        _shutting_down = True
+        executor = _executor
         _executor = None
+    # Wait for in-flight work outside the lock -- holding it here would block
+    # every other caller of submit()/shutdown()/reset_for_tests() until the
+    # in-flight jobs drain.
+    if executor is not None:
+        executor.shutdown(wait=True)
 
 
 def _document_id_for(path: Path) -> str:
@@ -77,6 +91,23 @@ def _run(job_id: str, source_path: Path, engine: str, options: ConversionOptions
         source_path.unlink(missing_ok=True)
 
 
+def _worker_finished(job_id: str):
+    """Catch a worker that died in its own error handling.
+
+    `_run` records its own failures; reaching here means the bookkeeping itself
+    raised, which would otherwise leave the job stuck in `processing`.
+    """
+
+    def callback(future) -> None:
+        exc = future.exception()
+        if exc is None:
+            return
+        with contextlib.suppress(Exception):
+            database.set_job_status(job_id, "failed", error=type(exc).__name__)
+
+    return callback
+
+
 def submit(
     source_path: Path,
     filename: str,
@@ -92,8 +123,12 @@ def submit(
     source_path = Path(source_path)
     document_id = _document_id_for(source_path)
     job_id = f"job_{uuid4().hex[:16]}"
-    database.create_job(job_id, document_id)
-    _pool().submit(_run, job_id, source_path, engine, options)
+    with _executor_lock:
+        if _shutting_down:
+            raise ServiceUnavailableError("service is shutting down")
+        database.create_job(job_id, document_id)
+        future = _pool().submit(_run, job_id, source_path, engine, options)
+    future.add_done_callback(_worker_finished(job_id))
     return job_id, document_id
 
 
