@@ -20,7 +20,6 @@ Closes the limitations documented in 0.1.0.
   cache.
 - Converting two same-named files from different directories into one output
   directory now warns instead of silently replacing the earlier result.
-- A two-line pseudo-table no longer loses a row when split.
 
 ## 0.1.0 — 2026-08-01
 
