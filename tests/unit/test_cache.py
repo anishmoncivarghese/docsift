@@ -150,6 +150,17 @@ def test_clear_cache_ignores_files_docsift_did_not_write(counting_engine, text_f
     assert stranger.exists()
 
 
+def test_clear_cache_ignores_a_newline_suffixed_entry_name(counting_engine, text_file):
+    from docsift.storage.cache import cache_dir, cache_stats, clear_cache
+
+    convert_document(text_file)
+    stranger = cache_dir() / ("f" * 64 + ".json\n")
+    stranger.write_text("{}", encoding="utf-8")
+    assert cache_stats()[0] == 1
+    assert clear_cache() == 1
+    assert stranger.exists()
+
+
 def test_cache_info_on_fresh_machine_is_read_only(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 

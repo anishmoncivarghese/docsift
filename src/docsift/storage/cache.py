@@ -65,7 +65,9 @@ def cache_entries() -> list[Path]:
     point anywhere — never has unrelated files reported or deleted.
     """
     return sorted(
-        entry for entry in cache_dir(create=False).glob("*.json") if _ENTRY_NAME.match(entry.name)
+        entry
+        for entry in cache_dir(create=False).glob("*.json")
+        if _ENTRY_NAME.fullmatch(entry.name)
     )
 
 

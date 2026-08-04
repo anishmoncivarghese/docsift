@@ -95,3 +95,8 @@ def test_delete_removes_everything():
 def test_malformed_document_ids_are_rejected(bad_id):
     with pytest.raises(UnsupportedFileError, match="invalid document id"):
         documents.document_dir(bad_id)
+
+
+def test_trailing_newline_document_id_is_rejected():
+    with pytest.raises(UnsupportedFileError, match="invalid document id"):
+        documents.document_dir("doc_abc123def456\n")

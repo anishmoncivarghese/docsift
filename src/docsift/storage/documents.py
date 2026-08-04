@@ -23,7 +23,7 @@ def document_dir(document_id: str) -> Path:
     read-only path helper must not leave empty directories behind just
     because someone looked up an id.
     """
-    if not _DOCUMENT_ID.match(document_id):
+    if not _DOCUMENT_ID.fullmatch(document_id):
         raise UnsupportedFileError(f"invalid document id: {document_id!r}")
     return get_settings().data_dir / "documents" / document_id
 
