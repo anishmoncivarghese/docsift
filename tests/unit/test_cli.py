@@ -127,6 +127,39 @@ def test_convert_reports_chunks_and_accepts_chunk_flags(stub_engine, tmp_path, m
     assert "chunks:" in result.output
 
 
+def test_convert_prints_overlap_not_supported_warning(tmp_path, monkeypatch):
+    class PrechunkedEngine(ConversionEngine):
+        name = "markitdown"
+
+        @classmethod
+        def is_available(cls) -> bool:
+            return True
+
+        def convert(self, path: Path, options=None) -> EngineOutput:
+            from docsift.core.models import Chunk
+
+            return EngineOutput(
+                markdown="# T\n\nBody.",
+                engine_version="9.9.9",
+                chunks=[Chunk(chunk_id="c000", text="Body.", estimated_tokens=2)],
+            )
+
+    monkeypatch.setenv("DOCSIFT_CACHE_DIR", str(tmp_path / "cache"))
+    register_engine("markitdown", PrechunkedEngine)
+    source = tmp_path / "note.txt"
+    source.write_text("hello", encoding="utf-8")
+    try:
+        result = runner.invoke(
+            app,
+            ["convert", str(source), "--output", str(tmp_path / "out"), "--overlap", "50"],
+        )
+    finally:
+        unregister_engine("markitdown")
+        register_engine("markitdown", StubEngine)
+    assert result.exit_code == 0, result.output
+    assert "warning: overlap_not_supported" in result.output
+
+
 def test_convert_no_cache_flag_accepted(stub_engine, tmp_path, monkeypatch):
     monkeypatch.setenv("DOCSIFT_CACHE_DIR", str(tmp_path / "cache"))
     source = tmp_path / "note.txt"

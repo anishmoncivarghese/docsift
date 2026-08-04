@@ -85,6 +85,10 @@ def convert(
     typer.echo(f"chunks: {len(result.chunks)}")
     typer.echo(f"markdown: {output / (path.stem + '.md')}")
     typer.echo(f"result_json: {output / (path.stem + '.docsift.json')}")
+    for warning in result.warnings:
+        typer.secho(
+            f"warning: {warning.code}: {warning.message}", fg=typer.colors.YELLOW, err=True
+        )
 
 
 @app.command()
