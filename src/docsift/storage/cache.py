@@ -8,10 +8,11 @@ from docsift.core.models import ConversionResult
 from docsift.core.options import ConversionOptions
 
 
-def cache_dir() -> Path:
+def cache_dir(create: bool = True) -> Path:
     override = os.environ.get("DOCSIFT_CACHE_DIR")
     base = Path(override) if override else Path.home() / ".cache" / "docsift"
-    base.mkdir(parents=True, exist_ok=True)
+    if create:
+        base.mkdir(parents=True, exist_ok=True)
     return base
 
 
@@ -63,7 +64,9 @@ def cache_entries() -> list[Path]:
     shared with other files — `DOCSIFT_CACHE_DIR` is a bare env var and may
     point anywhere — never has unrelated files reported or deleted.
     """
-    return sorted(entry for entry in cache_dir().glob("*.json") if _ENTRY_NAME.match(entry.name))
+    return sorted(
+        entry for entry in cache_dir(create=False).glob("*.json") if _ENTRY_NAME.match(entry.name)
+    )
 
 
 def cache_stats() -> tuple[int, int]:

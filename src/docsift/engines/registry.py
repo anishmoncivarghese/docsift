@@ -40,6 +40,6 @@ def get_engine(name: str) -> ConversionEngine:
     cls = _resolve(name)
     if not cls.is_available():
         raise EngineNotAvailableError(
-            f"engine '{name}' is not installed; install it with: uv pip install 'docsift[{name}]'"
+            f"engine '{name}' is not installed; install it with: pip install 'docsift[{name}]'"
         )
     return cls()

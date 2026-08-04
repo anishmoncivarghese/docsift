@@ -165,7 +165,7 @@ def cache_info() -> None:
     from docsift.storage.cache import cache_dir, cache_stats
 
     count, size = cache_stats()
-    typer.echo(f"location: {cache_dir()}")
+    typer.echo(f"location: {cache_dir(create=False)}")
     typer.echo(f"entries: {count}")
     typer.echo(f"bytes: {size}")
 

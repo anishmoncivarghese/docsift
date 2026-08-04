@@ -150,6 +150,20 @@ def test_clear_cache_ignores_files_docsift_did_not_write(counting_engine, text_f
     assert stranger.exists()
 
 
+def test_cache_info_on_fresh_machine_is_read_only(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from docsift.cli.main import app
+
+    fresh_dir = tmp_path / "never-created-cache"
+    monkeypatch.setenv("DOCSIFT_CACHE_DIR", str(fresh_dir))
+    runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
+    info = runner.invoke(app, ["cache", "info"])
+    assert info.exit_code == 0, info.output
+    assert "entries: 0" in info.output
+    assert not fresh_dir.exists()
+
+
 def test_cache_stats_survives_entries_vanishing(counting_engine, text_file, monkeypatch):
     from pathlib import Path
 
