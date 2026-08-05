@@ -55,7 +55,7 @@ an unchanged file with unchanged settings returns instantly.
 
 ## HTTP API
 
-    pip install "docsift[api]"
+    pip install "docsift[all]"   # api extra alone pulls no conversion engine -- see Install
     docsift serve
 
 Then convert a document asynchronously:
@@ -76,14 +76,46 @@ is at `/openapi.json`.
 
 State lives in `DOCSIFT_DATA_DIR` (default `~/.local/share/docsift`): a SQLite
 database of jobs and documents, plus stored artifacts. Uploads are capped at
-50 MB via `DOCSIFT_MAX_UPLOAD_BYTES`. `DELETE /v1/documents/{id}` removes the
-stored document and its database record, and also purges any cached
-conversion results for it, so deletion is genuine rather than leaving a copy
-recoverable from the cache.
+50 MB via `DOCSIFT_MAX_UPLOAD_BYTES` (raising it works too, not just lowering
+it). `DELETE /v1/documents/{id}` removes the stored document and its database
+record, and also purges any cached conversion results for it, so deletion is
+genuine rather than leaving a copy recoverable from the cache — including a
+document whose conversion is still running when the delete lands: the job is
+cancelled and its result is never stored.
+
+Background conversion runs on a pool of `DOCSIFT_JOB_WORKERS` threads
+(default 2). Each queued job holds its uploaded original on disk until a
+worker reaches it, so the backlog is bounded by `DOCSIFT_MAX_PENDING_JOBS`
+(default 32); once it's full, `POST /v1/documents` returns `503` until a slot
+frees up.
 
 **Running untrusted documents:** the service converts whatever it is given.
 Run it on infrastructure you control, behind your own authentication — DocSift
 has none of its own — and prefer the container, which runs as a non-root user.
+
+## Docker
+
+    docker build -t docsift .
+    docker run -p 8000:8000 -v docsift-data:/data docsift
+
+That uses a named volume (`docsift-data`) for `/data`, where the SQLite
+database and stored documents live.
+
+**Use a named volume, not a bare host bind mount.** The container runs as
+uid 10001, not root. A named volume like the example above is created
+owned by that user automatically. A host bind mount
+
+    docker run -p 8000:8000 -v /host/path:/data docsift   # will not start
+
+arrives **root-owned**, so uid 10001 cannot create the database file and the
+container fails on its first request. If you need a bind mount for a
+specific host path, `chown 10001:10001 /host/path` first:
+
+    sudo chown 10001:10001 /host/path
+    docker run -p 8000:8000 -v /host/path:/data docsift
+
+The image publishes a `HEALTHCHECK` against `/health` and declares `/data`
+as a volume.
 
 ## Known limitations
 
@@ -107,6 +139,29 @@ has none of its own — and prefer the container, which runs as a non-root user.
 - The API has no authentication, rate limiting or multi-tenancy. Do not expose
   it directly to the internet.
 - Search and comparison endpoints are not implemented yet.
+- Single-process only. Running two instances (or `uvicorn --workers 2`)
+  against the same `DOCSIFT_DATA_DIR` makes each instance's startup mark the
+  *other* instance's live jobs as `failed`/`interrupted`, since each assumes
+  any `queued`/`processing` row it didn't create was abandoned by a crashed
+  process.
+- Conversions run with no processing timeout. A pathological document can
+  occupy a worker indefinitely; with the default of 2 workers, two such
+  documents wedge the service.
+- `.zip` uploads are expanded by MarkItDown without a decompression-ratio or
+  member-count bound.
+- Document ids are derived from file content (a content hash), not issued as
+  capability tokens. Two callers who upload the same bytes share one
+  document, and either can retrieve or delete it.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCSIFT_DATA_DIR` | `~/.local/share/docsift` | SQLite database and stored documents. |
+| `DOCSIFT_CACHE_DIR` | `~/.cache/docsift` | Disposable conversion-result cache. |
+| `DOCSIFT_MAX_UPLOAD_BYTES` | `52428800` (50 MB) | Upload size ceiling; can be raised or lowered. |
+| `DOCSIFT_JOB_WORKERS` | `2` | Background conversion threads. |
+| `DOCSIFT_MAX_PENDING_JOBS` | `32` | Queued + in-flight job ceiling; `POST /v1/documents` returns `503` past it. |
 
 ## License
 

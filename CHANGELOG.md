@@ -17,9 +17,26 @@ Adds an HTTP API.
   cache in `DOCSIFT_CACHE_DIR`.
 - Jobs left `queued` or `processing` by a stopped process are reported as
   `failed` with error `interrupted` on the next startup rather than hanging.
-- Uploads are capped at 50 MB (`DOCSIFT_MAX_UPLOAD_BYTES`), unsupported types are
-  rejected with `415`, and the client's filename is never used as a path.
-- A `Dockerfile` runs the service as a non-root user.
+- Uploads are capped at 50 MB (`DOCSIFT_MAX_UPLOAD_BYTES`, adjustable in either
+  direction), unsupported types are rejected with `415`, and the client's
+  filename is never used as a path.
+- `DELETE /v1/documents/{id}` cancels a conversion still in progress instead
+  of letting the worker resurrect it afterwards; returns `202` when nothing
+  existed yet but a job was cancelled, `204` for a normal completed delete.
+- The `engine` form field is validated against the registered engines before
+  an upload is accepted; an unrecognized value is rejected with `400` rather
+  than stored verbatim in the job's error text.
+- The background job backlog is bounded (`DOCSIFT_MAX_PENDING_JOBS`, default
+  32); `POST /v1/documents` returns `503` once it's full instead of queuing
+  uploads without limit.
+- Installing `docsift[all]` now also pulls the `api` extra
+  (fastapi/uvicorn/python-multipart), so it's a complete install for both
+  conversion engines and the HTTP API.
+- The conversion cache key includes the DocSift version, so this 0.2.0 bump
+  invalidates every cache entry written by 0.1.x — the first conversion after
+  upgrading always re-runs rather than returning a stale cached result.
+- A `Dockerfile` runs the service as a non-root user, pins its `uv` base
+  image, declares `/data` as a volume, and adds a `HEALTHCHECK`.
 - OpenAPI at `/openapi.json`, with stable operation ids for connector imports.
 
 Search (`/v1/documents/{id}/search`) and `POST /v1/compare` are not implemented yet.
