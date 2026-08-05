@@ -205,6 +205,26 @@ def test_document_search_rejects_an_overlong_query_quickly(client):
     assert elapsed < 1.0
 
 
+def test_search_existence_check_does_not_load_the_full_stored_result(client, monkeypatch):
+    """The search route's existence check must use the cheap indexed
+    metadata lookup (what the CLI already does), not documents.load_result,
+    which parses the complete stored result (full markdown plus every
+    chunk) only to discard it. Only the rare not-indexed path (Fix 3) may
+    fall back to it."""
+    from docsift.storage import documents
+
+    _, document_id = _upload_and_wait(client)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("load_result must not be called on the indexed happy path")
+
+    monkeypatch.setattr(documents, "load_result", fail)
+
+    response = client.get(f"/v1/documents/{document_id}/search", params={"q": "body"})
+
+    assert response.status_code == 200
+
+
 def test_search_returns_409_when_document_has_chunks_but_no_index_rows(client):
     """Simulates a document converted under 0.2.0 (or one whose index rows
     were otherwise lost): the stored result has chunks, but nothing is

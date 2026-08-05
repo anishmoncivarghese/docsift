@@ -254,20 +254,31 @@ def create_app() -> FastAPI:
         max_tokens: Annotated[int, Query(ge=1, le=20_000)] = 5000,
         context: Annotated[int, Query(ge=0, le=2)] = 0,
     ) -> SearchResponse:
-        # Confirm the stored result exists rather than treating an empty index
-        # as proof of absence: documents with no chunks are valid and simply
-        # return no matches.
-        result = _load_or_404(document_id)
-        if result.chunks and database.count_indexed_chunks(document_id) == 0:
-            # A document converted before search shipped (or one whose index
-            # rows were otherwise lost) has chunks but nothing indexed --
-            # indistinguishable from a genuine miss unless flagged
-            # separately. An empty 200 here would be silent data loss from
-            # the caller's point of view.
-            raise HTTPException(
-                status_code=409,
-                detail="document is not indexed; re-upload it to index it",
-            )
+        # Confirm the document exists via the metadata row -- an indexed
+        # primary-key lookup, same as the CLI -- rather than parsing the
+        # complete stored result (full markdown plus every chunk) just to
+        # throw it away. `documents.document_dir` still validates the id's
+        # shape first, so a malformed id 404s without ever touching sqlite.
+        try:
+            documents.document_dir(document_id)
+        except UnsupportedFileError:
+            raise HTTPException(status_code=404, detail="document not found") from None
+        if database.get_document(document_id) is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        indexed_count = database.count_indexed_chunks(document_id)
+        if indexed_count == 0:
+            # Rare path: only now is the full stored result worth loading,
+            # to tell a document that legitimately has no chunks apart from
+            # one converted before search shipped (or whose index rows were
+            # otherwise lost) -- indistinguishable from a genuine miss
+            # unless flagged separately. An empty 200 here would be silent
+            # data loss from the caller's point of view.
+            result = documents.load_result(document_id)
+            if result is not None and result.chunks:
+                raise HTTPException(
+                    status_code=409,
+                    detail="document is not indexed; re-upload it to index it",
+                )
         try:
             return search_service.search_document(
                 document_id,
