@@ -91,9 +91,16 @@ frees up.
 
 **Running untrusted documents:** the service converts whatever it is given.
 Run it on infrastructure you control, behind your own authentication — DocSift
-has none of its own — and prefer the container, which runs as a non-root user.
+has none of its own.
 
 ## Docker
+
+> **Not yet build-tested.** The image definition below runs the service as a
+> non-root user and is written against the documented behaviour of its base
+> images, but no `docker build` has been run against it. Treat it as a starting
+> point to verify in your own environment rather than a proven artifact. Running
+> DocSift directly (`pip install "docsift[all]"` and `docsift serve`) is the
+> path that is exercised by the test suite.
 
     docker build -t docsift .
     docker run -p 8000:8000 -v docsift-data:/data docsift
