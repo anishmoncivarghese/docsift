@@ -135,6 +135,22 @@ def test_invalid_fts_syntax_is_hidden_behind_a_content_safe_error():
     assert "private phrase" not in str(error.value)
 
 
+def test_infrastructure_faults_are_not_reported_as_invalid_queries(monkeypatch):
+    import sqlite3
+
+    from docsift.storage import database
+
+    document_id = _index()
+
+    def broken(*args, **kwargs):
+        raise sqlite3.OperationalError("no such table: document_chunks")
+
+    monkeypatch.setattr(database, "search_document_chunks", broken)
+
+    with pytest.raises(sqlite3.OperationalError, match="no such table"):
+        search_document(document_id, "operational")
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

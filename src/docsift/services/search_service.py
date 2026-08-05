@@ -88,9 +88,22 @@ def search_document(
 
     try:
         direct_rows = database.search_document_chunks(document_id, normalized_query, limit)
-    except sqlite3.OperationalError:
-        # SQLite error text may repeat the caller's query. Keep the public
-        # error stable and content-safe instead of exposing it.
+    except sqlite3.OperationalError as exc:
+        # OperationalError also covers infrastructure faults ("no such
+        # table", "database is locked", "disk I/O error", "database disk
+        # image is malformed") that have nothing to do with the query being
+        # invalid. Only a genuine FTS5 expression error should be reported
+        # to the caller as one; anything else must surface as the 500 it
+        # actually is. SQLite prefixes most FTS5 parse errors with "fts5:"
+        # (e.g. "fts5: syntax error near ..."); an unterminated quoted
+        # phrase is reported as bare "unterminated string" by the tokenizer
+        # before the fts5: prefix is attached, so it's checked for
+        # separately. Neither marker appears in any infrastructure-fault
+        # message. SQLite error text may repeat the caller's query, so keep
+        # the public error stable and content-safe instead of exposing it.
+        message = str(exc)
+        if "fts5:" not in message and "unterminated" not in message:
+            raise
         raise SearchQueryError("invalid search query") from None
 
     if not direct_rows:
