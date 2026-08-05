@@ -106,6 +106,53 @@ def test_reprocessing_same_document_replaces_its_search_rows(tmp_path):
     assert [row["chunk_id"] for row in rows] == [f"{document_id}_c000"]
 
 
+def test_failed_conversion_never_indexes_any_chunks(upload):
+    """Task 2's required test list included this and no added test actually
+    asserted it -- the code is correct today, but nothing pins it."""
+    register_engine("markitdown", BoomEngine)
+    try:
+        job_id, document_id = job_service.submit(upload, "upload.txt")
+        assert _await_job(job_id) == "failed"
+    finally:
+        unregister_engine("markitdown")
+
+    assert database.search_document_chunks(document_id, "document", limit=5) == []
+
+
+def test_job_cancelled_by_a_concurrent_delete_never_indexes_any_chunks(tmp_path):
+    import threading
+
+    release = threading.Event()
+
+    class SlowEngine(OkEngine):
+        def convert(self, path: Path, options=None) -> EngineOutput:
+            release.wait(timeout=30)
+            return EngineOutput(markdown="# Job\n\nBody text.\n", engine_version="9.9.9")
+
+    register_engine("markitdown", SlowEngine)
+    try:
+        source = tmp_path / "cancel_me.txt"
+        source.write_text("hello world", encoding="utf-8")
+        job_id, document_id = job_service.submit(source, "cancel_me.txt")
+
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            record = job_service.get(job_id)
+            if record and record.status == "processing":
+                break
+            time.sleep(0.02)
+        else:
+            raise AssertionError("job never reached processing")
+        assert database.request_cancel(document_id) == 1
+
+        release.set()
+        assert _await_job(job_id) == "failed"
+    finally:
+        unregister_engine("markitdown")
+
+    assert database.search_document_chunks(document_id, "body", limit=5) == []
+
+
 def test_index_failure_fails_job_without_exposing_document_content(upload, monkeypatch):
     def fail_index(*args, **kwargs):
         raise RuntimeError("secret document content")
