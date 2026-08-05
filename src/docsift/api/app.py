@@ -30,7 +30,7 @@ from docsift.api.schemas import (
 from docsift.core.config import get_settings
 from docsift.core.exceptions import ServiceUnavailableError, UnsupportedFileError
 from docsift.core.models import ConversionResult
-from docsift.engines.router import SUPPORTED_SUFFIXES
+from docsift.engines.router import SUPPORTED_SUFFIXES, valid_engine_choices
 from docsift.services import job_service
 from docsift.storage import cache, database, documents
 
@@ -129,6 +129,12 @@ def create_app() -> FastAPI:
                 status_code=415,
                 detail=f"unsupported file type '{suffix}'",
             )
+        # Validated before anything is written to disk, and the offending
+        # value is never echoed back: an anonymous caller could otherwise post
+        # an arbitrarily large `engine` string that ends up interpolated into
+        # EngineNotAvailableError and stored verbatim in jobs.error.
+        if engine not in valid_engine_choices():
+            raise HTTPException(status_code=400, detail="unknown engine")
 
         uploads = settings.data_dir / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)

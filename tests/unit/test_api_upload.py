@@ -178,6 +178,41 @@ def test_service_unavailable_while_shutting_down_returns_503(client, engine, mon
     assert response.status_code == 503
 
 
+def test_unknown_engine_is_rejected_before_touching_disk(client, engine, tmp_path):
+    huge_engine_name = "x" * (20 * 1024)
+    response = client.post(
+        "/v1/documents",
+        files={"file": ("note.txt", b"hello world", "text/plain")},
+        data={"engine": huge_engine_name},
+    )
+    assert response.status_code == 400
+    assert huge_engine_name not in response.text
+    assert not (tmp_path / "data" / "uploads").exists()
+
+
+def test_unknown_engine_writes_no_job_row(client, engine):
+    from docsift.storage import database
+
+    response = client.post(
+        "/v1/documents",
+        files={"file": ("note.txt", b"hello world", "text/plain")},
+        data={"engine": "not-a-real-engine"},
+    )
+    assert response.status_code == 400
+    with database.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS n FROM jobs").fetchone()["n"]
+    assert count == 0
+
+
+def test_valid_explicit_engine_still_works(client, engine):
+    response = client.post(
+        "/v1/documents",
+        files={"file": ("note.txt", b"hello world", "text/plain")},
+        data={"engine": "markitdown"},
+    )
+    assert response.status_code == 202
+
+
 def test_importing_the_app_pulls_no_engine_modules():
     import subprocess
     import sys
