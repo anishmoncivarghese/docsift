@@ -11,6 +11,7 @@ limitations for the user-facing note.
 """
 
 import json
+import sqlite3
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -30,7 +31,12 @@ from docsift.api.schemas import (
     VersionResponse,
 )
 from docsift.core.config import get_settings
-from docsift.core.exceptions import SearchQueryError, ServiceUnavailableError, UnsupportedFileError
+from docsift.core.exceptions import (
+    SearchQueryError,
+    SearchUnavailableError,
+    ServiceUnavailableError,
+    UnsupportedFileError,
+)
 from docsift.core.models import ConversionResult
 from docsift.engines.router import SUPPORTED_SUFFIXES, valid_engine_choices
 from docsift.services import job_service, search_service
@@ -265,7 +271,13 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="document not found") from None
         if database.get_document(document_id) is None:
             raise HTTPException(status_code=404, detail="document not found")
-        indexed_count = database.count_indexed_chunks(document_id)
+        try:
+            indexed_count = database.count_indexed_chunks(document_id)
+        except sqlite3.OperationalError:
+            # document_chunks doesn't exist -- this SQLite build lacks FTS5
+            # (see init_db()). Skip the not-indexed check below and let
+            # search_service report unavailability explicitly.
+            indexed_count = None
         if indexed_count == 0:
             # Rare path: only now is the full stored result worth loading,
             # to tell a document that legitimately has no chunks apart from
@@ -289,6 +301,8 @@ def create_app() -> FastAPI:
             )
         except SearchQueryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except SearchUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.delete(
         "/v1/documents/{document_id}",

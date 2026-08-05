@@ -333,6 +333,21 @@ def get_indexed_chunks(document_id: str, positions: list[int]) -> list[dict]:
     return [_decode_chunk_row(row) for row in rows]
 
 
+def search_index_available() -> bool:
+    """Whether this SQLite build has the FTS5 extension search needs.
+
+    False after init_db() caught an OperationalError creating
+    `document_chunks` -- a SQLite compiled without FTS5. Cheap: a single
+    indexed lookup against sqlite_master, not a query against the table
+    itself (which wouldn't exist to query).
+    """
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'document_chunks'"
+        ).fetchone()
+    return row is not None
+
+
 def count_indexed_chunks(document_id: str) -> int:
     """Cheap row count for one document's search index -- no content scan."""
     with connect() as connection:

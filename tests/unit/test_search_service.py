@@ -1,6 +1,6 @@
 import pytest
 
-from docsift.core.exceptions import SearchQueryError
+from docsift.core.exceptions import SearchQueryError, SearchUnavailableError
 from docsift.core.models import Chunk
 from docsift.services.search_service import search_document
 from docsift.storage import database
@@ -133,6 +133,16 @@ def test_invalid_fts_syntax_is_hidden_behind_a_content_safe_error():
         search_document(document_id, '"private phrase')
 
     assert "private phrase" not in str(error.value)
+
+
+def test_search_raises_unavailable_error_when_fts5_is_missing(monkeypatch):
+    from docsift.storage import database
+
+    document_id = _index()
+    monkeypatch.setattr(database, "search_index_available", lambda: False)
+
+    with pytest.raises(SearchUnavailableError, match="FTS5"):
+        search_document(document_id, "operational")
 
 
 def test_infrastructure_faults_are_not_reported_as_invalid_queries(monkeypatch):

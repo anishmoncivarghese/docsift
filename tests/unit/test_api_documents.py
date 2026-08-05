@@ -400,6 +400,53 @@ def test_delete_failure_returns_json_500_not_a_bare_error(client, monkeypatch):
     assert response.json()["detail"] == "failed to delete document"
 
 
+def test_missing_fts5_degrades_gracefully_instead_of_failing_the_service(tmp_path, monkeypatch):
+    """On a Python built against a SQLite without FTS5, init_db() (called
+    from API startup) must not take down /health, upload and every other
+    0.2.0 endpoint along with it. Only search itself should report the
+    gap, as a 503."""
+    import sqlite3
+
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DOCSIFT_CACHE_DIR", str(tmp_path / "cache"))
+    from docsift.services import job_service
+
+    job_service.reset_for_tests()
+
+    class _NoFts5Connection(sqlite3.Connection):
+        def executescript(self, script, *args, **kwargs):
+            if "fts5" in script.lower():
+                raise sqlite3.OperationalError("no such module: fts5")
+            return super().executescript(script, *args, **kwargs)
+
+    real_connect = sqlite3.connect
+
+    def patched_connect(*args, **kwargs):
+        kwargs["factory"] = _NoFts5Connection
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", patched_connect)
+
+    register_engine("markitdown", OkEngine)
+    try:
+        from docsift.api.app import create_app
+
+        with TestClient(create_app()) as test_client:
+            assert test_client.get("/health").status_code == 200
+
+            _, document_id = _upload_and_wait(test_client)
+
+            search_response = test_client.get(
+                f"/v1/documents/{document_id}/search", params={"q": "body"}
+            )
+            assert search_response.status_code == 503
+            assert "FTS5" in search_response.json()["detail"]
+    finally:
+        unregister_engine("markitdown")
+        job_service.shutdown()
+        job_service.reset_for_tests()
+
+
 def test_delete_reports_500_when_a_cache_purge_fails(client, monkeypatch):
     """A cache entry that can't be unlinked must not be swallowed into a
     204 -- that would claim deletion succeeded while a readable copy of the

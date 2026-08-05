@@ -152,6 +152,53 @@ def test_init_db_rebuilds_a_document_chunks_index_built_without_doc_token(tmp_pa
     assert database.search_document_chunks(document_id, "operational", limit=5) == rows
 
 
+def _force_fts5_creation_to_fail(monkeypatch) -> None:
+    """Simulate a SQLite build with no FTS5 extension: only the
+    `CREATE VIRTUAL TABLE ... USING fts5` statement fails, everything else
+    behaves normally. sqlite3.Connection is a C type and can't be patched
+    directly, so route sqlite3.connect() through a subclass instead."""
+    import sqlite3
+
+    class _NoFts5Connection(sqlite3.Connection):
+        def executescript(self, script, *args, **kwargs):
+            if "fts5" in script.lower():
+                raise sqlite3.OperationalError("no such module: fts5")
+            return super().executescript(script, *args, **kwargs)
+
+    real_connect = sqlite3.connect
+
+    def patched_connect(*args, **kwargs):
+        kwargs["factory"] = _NoFts5Connection
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", patched_connect)
+
+
+def test_init_db_degrades_gracefully_when_fts5_is_unavailable(tmp_path, monkeypatch):
+    """A SQLite build without the FTS5 extension must not take the whole
+    service down. init_db() must still create documents/jobs and stay
+    idempotent; search_index_available() must report the gap."""
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "no_fts5"))
+    _force_fts5_creation_to_fail(monkeypatch)
+
+    database.init_db()
+    database.init_db()  # idempotent even in the degraded state
+
+    assert database.search_index_available() is False
+    database.create_job("job_no_fts5", None)
+    assert database.get_job("job_no_fts5") is not None
+
+
+def test_index_document_chunks_skips_silently_when_fts5_is_unavailable(tmp_path, monkeypatch):
+    """A conversion must still succeed even though there is nowhere to
+    index its chunks."""
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "no_fts5_index"))
+    _force_fts5_creation_to_fail(monkeypatch)
+    database.init_db()
+
+    database.index_document_chunks("doc_nofts50000", _chunks("doc_nofts50000"))  # must not raise
+
+
 def test_request_cancel_only_flags_unfinished_jobs():
     database.create_job("job_done", "doc_a")
     database.set_job_status("job_done", "succeeded", document_id="doc_a")

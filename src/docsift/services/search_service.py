@@ -3,7 +3,7 @@
 import sqlite3
 
 from docsift.api.schemas import SearchResponse, SearchResult
-from docsift.core.exceptions import SearchQueryError
+from docsift.core.exceptions import SearchQueryError, SearchUnavailableError
 from docsift.storage import database
 
 
@@ -74,6 +74,13 @@ def search_document(
     `limit` applies to direct FTS matches. Context chunks can increase the
     result count, but every returned chunk shares one total token budget.
     """
+    if not database.search_index_available():
+        # A SQLite build with no FTS5 extension: init_db() already let the
+        # rest of the service start rather than failing at startup, so this
+        # is reported here, per call, as a clear domain error instead of
+        # the caller hitting an unhandled "no such table".
+        raise SearchUnavailableError("search is unavailable: this SQLite build lacks FTS5")
+
     normalized_query = _normalize_query(query)
     if not normalized_query:
         raise SearchQueryError("query must not be blank")

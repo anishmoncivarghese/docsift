@@ -20,3 +20,7 @@ class ServiceUnavailableError(DocSiftError):
 
 class SearchQueryError(DocSiftError):
     """A search query or retrieval control is invalid."""
+
+
+class SearchUnavailableError(DocSiftError):
+    """The running SQLite build lacks the FTS5 extension search needs."""
