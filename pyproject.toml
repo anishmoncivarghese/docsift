@@ -40,6 +40,7 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.5",
   "fpdf2>=2.7",
+  "httpx>=0.27",
 ]
 
 [build-system]
@@ -67,9 +68,10 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.flake8-bugbear]
-# Typer's documented pattern: typer.Argument()/typer.Option() as parameter
-# defaults are how the CLI declares its options; they aren't mutable-default bugs.
-extend-immutable-calls = ["typer.Argument", "typer.Option"]
+# Typer's and FastAPI's documented patterns: typer.Argument()/typer.Option() and
+# fastapi.File()/fastapi.Form() as parameter defaults are how each framework
+# declares its inputs; they aren't mutable-default bugs.
+extend-immutable-calls = ["typer.Argument", "typer.Option", "fastapi.File", "fastapi.Form"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
