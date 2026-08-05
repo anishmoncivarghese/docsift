@@ -205,6 +205,22 @@ def test_document_search_rejects_an_overlong_query_quickly(client):
     assert elapsed < 1.0
 
 
+def test_search_returns_409_when_document_has_chunks_but_no_index_rows(client):
+    """Simulates a document converted under 0.2.0 (or one whose index rows
+    were otherwise lost): the stored result has chunks, but nothing is
+    indexed. A 200 with an empty result set would be indistinguishable from
+    a genuine no-match search."""
+    from docsift.storage import database
+
+    _, document_id = _upload_and_wait(client)
+    database.index_document_chunks(document_id, [])
+
+    response = client.get(f"/v1/documents/{document_id}/search", params={"q": "body"})
+
+    assert response.status_code == 409
+    assert "not indexed" in response.json()["detail"]
+
+
 def test_search_endpoint_has_stable_openapi_contract(client):
     operation = client.get("/openapi.json").json()["paths"]["/v1/documents/{document_id}/search"][
         "get"

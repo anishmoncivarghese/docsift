@@ -209,6 +209,17 @@ def test_empty_chunk_list_clears_an_existing_index():
     assert database.search_document_chunks("doc_search", "revenue", limit=5) == []
 
 
+def test_count_indexed_chunks_reports_zero_for_an_unindexed_document():
+    assert database.count_indexed_chunks("doc_missing") == 0
+
+
+def test_count_indexed_chunks_reports_the_indexed_row_count():
+    database.index_document_chunks("doc_search", _chunks())
+    assert database.count_indexed_chunks("doc_search") == len(_chunks())
+    database.index_document_chunks("doc_other", _chunks("doc_other"))
+    assert database.count_indexed_chunks("doc_search") == len(_chunks())
+
+
 def test_delete_document_also_removes_its_search_index():
     database.save_document(
         "doc_search", "report.pdf", "application/pdf", 10, "a" * 64, "docling", "/tmp/r.json"

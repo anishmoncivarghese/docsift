@@ -257,7 +257,17 @@ def create_app() -> FastAPI:
         # Confirm the stored result exists rather than treating an empty index
         # as proof of absence: documents with no chunks are valid and simply
         # return no matches.
-        _load_or_404(document_id)
+        result = _load_or_404(document_id)
+        if result.chunks and database.count_indexed_chunks(document_id) == 0:
+            # A document converted before search shipped (or one whose index
+            # rows were otherwise lost) has chunks but nothing indexed --
+            # indistinguishable from a genuine miss unless flagged
+            # separately. An empty 200 here would be silent data loss from
+            # the caller's point of view.
+            raise HTTPException(
+                status_code=409,
+                detail="document is not indexed; re-upload it to index it",
+            )
         try:
             return search_service.search_document(
                 document_id,

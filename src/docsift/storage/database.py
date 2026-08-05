@@ -266,6 +266,16 @@ def get_indexed_chunks(document_id: str, positions: list[int]) -> list[dict]:
     return [_decode_chunk_row(row) for row in rows]
 
 
+def count_indexed_chunks(document_id: str) -> int:
+    """Cheap row count for one document's search index -- no content scan."""
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) AS count FROM document_chunks WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+    return int(row["count"])
+
+
 def delete_document(document_id: str) -> bool:
     with connect() as connection:
         connection.execute("DELETE FROM document_chunks WHERE document_id = ?", (document_id,))
