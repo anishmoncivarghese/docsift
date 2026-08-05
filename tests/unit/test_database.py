@@ -74,3 +74,43 @@ def test_init_db_is_idempotent():
     database.init_db()
     database.create_job("job_3", None)
     assert database.get_job("job_3") is not None
+
+
+def test_init_db_migrates_a_database_created_before_cancel_requested_existed(tmp_path, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "legacy"))
+    legacy_path = database.database_path()
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(legacy_path)
+    try:
+        connection.execute(
+            "CREATE TABLE jobs ("
+            " job_id TEXT PRIMARY KEY, document_id TEXT, status TEXT NOT NULL,"
+            " error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    database.init_db()
+    database.create_job("job_legacy", "doc_legacy")
+    assert database.request_cancel("doc_legacy") == 1
+    assert database.is_cancel_requested("job_legacy") is True
+
+
+def test_request_cancel_only_flags_unfinished_jobs():
+    database.create_job("job_done", "doc_a")
+    database.set_job_status("job_done", "succeeded", document_id="doc_a")
+    assert database.request_cancel("doc_a") == 0
+    assert database.is_cancel_requested("job_done") is False
+
+
+def test_is_cancel_requested_is_false_for_unknown_job():
+    assert database.is_cancel_requested("job_missing") is False
+
+
+def test_set_job_status_truncates_long_error_text():
+    database.create_job("job_long_error", None)
+    database.set_job_status("job_long_error", "failed", error="x" * 10_000)
+    assert len(database.get_job("job_long_error")["error"]) == 500

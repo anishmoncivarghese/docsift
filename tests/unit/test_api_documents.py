@@ -197,6 +197,69 @@ def test_reuploading_after_delete_reconverts_rather_than_resurrecting(client):
     assert client.get(f"/v1/documents/{document_id}").status_code == 200
 
 
+def test_delete_during_conversion_is_not_undone(tmp_path, monkeypatch):
+    import threading
+
+    from docsift.api.app import create_app
+    from docsift.core.config import get_settings
+    from docsift.storage import cache
+
+    release = threading.Event()
+
+    class SlowEngine(ConversionEngine):
+        name = "markitdown"
+
+        @classmethod
+        def is_available(cls) -> bool:
+            return True
+
+        @classmethod
+        def version(cls) -> str:
+            return "9.9.9"
+
+        def convert(self, path, options=None) -> EngineOutput:
+            release.wait(timeout=30)
+            return EngineOutput(
+                markdown="# Secret\n\nCONFIDENTIAL-XYZ body text.\n",
+                engine_version="9.9.9",
+            )
+
+    register_engine("markitdown", SlowEngine)
+    try:
+        with TestClient(create_app()) as client:
+            response = client.post(
+                "/v1/documents",
+                files={"file": ("note.txt", b"race me", "text/plain")},
+            )
+            job_id = response.json()["job_id"]
+            document_id = response.json()["document_id"]
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                if client.get(f"/v1/jobs/{job_id}").json()["status"] == "processing":
+                    break
+                time.sleep(0.02)
+            assert client.delete(f"/v1/documents/{document_id}").status_code in (202, 204)
+            release.set()
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                if client.get(f"/v1/jobs/{job_id}").json()["status"] in (
+                    "succeeded",
+                    "failed",
+                ):
+                    break
+                time.sleep(0.05)
+            assert client.get(f"/v1/documents/{document_id}").status_code == 404
+    finally:
+        unregister_engine("markitdown")
+    leaked = [
+        path
+        for base in (get_settings().data_dir, cache.cache_dir(create=False))
+        for path in base.rglob("*")
+        if path.is_file() and "CONFIDENTIAL-XYZ" in path.read_text(errors="ignore")
+    ]
+    assert leaked == [], leaked
+
+
 def test_delete_failure_returns_json_500_not_a_bare_error(client, monkeypatch):
     from docsift.storage import documents
 

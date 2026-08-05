@@ -9,7 +9,7 @@ from docsift.core.config import get_settings
 from docsift.core.exceptions import DocSiftError, ServiceUnavailableError
 from docsift.core.models import JobRecord
 from docsift.core.options import ConversionOptions
-from docsift.storage import database, documents
+from docsift.storage import cache, database, documents
 
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
@@ -72,6 +72,13 @@ def _run(
     database.set_job_status(job_id, "processing")
     try:
         result = convert_document(source_path, engine=engine, options=options)
+        if database.is_cancel_requested(job_id):
+            # The client deleted this document while it was converting. Storing
+            # now would resurrect it, so drop the cache entry convert_document
+            # just wrote and record the job as cancelled.
+            cache.delete_entries_for_document(result.document_id)
+            database.set_job_status(job_id, "failed", error="cancelled by delete")
+            return
         # convert_document derives source.filename from source_path.name -- the
         # temp file's name, since it never sees the client's original filename.
         # Restore the caller-supplied name here; it's metadata only (artifacts

@@ -222,6 +222,11 @@ def create_app() -> FastAPI:
         operation_id="deleteDocument",
     )
     def delete_document(document_id: str) -> Response:
+        # Flag any still-running job for this document before touching the
+        # filesystem: a delete that lands while conversion is in progress must
+        # not be undone by the worker finishing afterwards and writing a fresh
+        # result. See job_service._run's cancel_requested check.
+        cancelled = database.request_cancel(document_id)
         try:
             removed_files = documents.delete_document_files(document_id)
         except UnsupportedFileError:
@@ -230,6 +235,11 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail="failed to delete document") from exc
         removed_row = database.delete_document(document_id)
         removed_cache = cache.delete_entries_for_document(document_id)
+        if cancelled and not (removed_files or removed_row or removed_cache):
+            # Nothing existed yet to delete, but a job was in flight -- a 404
+            # would tell the client something false (that there was never
+            # anything here), so say deletion was accepted instead.
+            return Response(status_code=202)
         if not (removed_files or removed_row or removed_cache):
             raise HTTPException(status_code=404, detail="document not found")
         return Response(status_code=204)

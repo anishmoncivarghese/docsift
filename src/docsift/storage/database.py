@@ -18,12 +18,13 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at  TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS jobs (
-    job_id      TEXT PRIMARY KEY,
-    document_id TEXT,
-    status      TEXT NOT NULL,
-    error       TEXT,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    job_id           TEXT PRIMARY KEY,
+    document_id      TEXT,
+    status           TEXT NOT NULL,
+    error            TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
+    cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 """
@@ -55,6 +56,16 @@ def connect() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with connect() as connection:
         connection.executescript(_SCHEMA)
+        # CREATE TABLE IF NOT EXISTS above never adds columns to an existing
+        # database, so a database created before `cancel_requested` existed
+        # needs this migration run on top of it. Idempotent: the second and
+        # later calls hit "duplicate column" and are ignored.
+        try:
+            connection.execute(
+                "ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already present
 
 
 def create_job(job_id: str, document_id: str | None) -> None:
@@ -67,12 +78,21 @@ def create_job(job_id: str, document_id: str | None) -> None:
         )
 
 
+_MAX_ERROR_LENGTH = 500
+
+
 def set_job_status(
     job_id: str,
     status: str,
     document_id: str | None = None,
     error: str | None = None,
 ) -> None:
+    # Defence in depth: error text can originate from caller-controlled input
+    # (e.g. the `engine` form field echoed into EngineNotAvailableError), so
+    # bound what gets written to sqlite and served back regardless of what
+    # validation exists upstream.
+    if error is not None and len(error) > _MAX_ERROR_LENGTH:
+        error = error[:_MAX_ERROR_LENGTH]
     with connect() as connection:
         connection.execute(
             "UPDATE jobs SET status = ?, updated_at = ?,"
@@ -81,6 +101,30 @@ def set_job_status(
             " WHERE job_id = ?",
             (status, _now(), document_id, error, job_id),
         )
+
+
+def request_cancel(document_id: str) -> int:
+    """Flag unfinished jobs for `document_id` so their results are never stored.
+
+    A delete issued while conversion is running must not be undone by the worker
+    finishing afterwards, so the decision is recorded on the job rather than
+    raced on the filesystem.
+    """
+    with connect() as connection:
+        cursor = connection.execute(
+            "UPDATE jobs SET cancel_requested = 1, updated_at = ?"
+            " WHERE document_id = ? AND status IN ('queued', 'processing')",
+            (_now(), document_id),
+        )
+        return cursor.rowcount
+
+
+def is_cancel_requested(job_id: str) -> bool:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT cancel_requested FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+    return bool(row["cancel_requested"]) if row else False
 
 
 def get_job(job_id: str) -> dict | None:
