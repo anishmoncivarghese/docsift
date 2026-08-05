@@ -29,8 +29,15 @@ CREATE TABLE IF NOT EXISTS jobs (
     cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+"""
+
+# Kept separate from _SCHEMA (and executed on its own) so a SQLite build
+# without the FTS5 extension can fail creating just this table while the
+# rest of init_db() still succeeds -- see init_db().
+_FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks USING fts5(
     document_id UNINDEXED,
+    doc_token,
     chunk_id UNINDEXED,
     position UNINDEXED,
     section,
@@ -65,6 +72,24 @@ def connect() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+def _rebuild_document_chunks_if_legacy(connection: sqlite3.Connection) -> None:
+    """Drop a `document_chunks` FTS5 table built before `doc_token` existed.
+
+    FTS5 virtual tables cannot be ALTERed to add a column, and the index is
+    derived data -- every document is reindexed on its next conversion -- so
+    the safe migration is to drop the stale table and let the
+    `CREATE VIRTUAL TABLE IF NOT EXISTS` below recreate it with the current
+    schema. A database that never had `document_chunks` at all (e.g. one
+    from before search existed) has nothing to drop here; the same
+    `CREATE ... IF NOT EXISTS` creates it fresh.
+    """
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'document_chunks'"
+    ).fetchone()
+    if row is not None and row["sql"] is not None and "doc_token" not in row["sql"]:
+        connection.execute("DROP TABLE document_chunks")
+
+
 def init_db() -> None:
     with connect() as connection:
         connection.executescript(_SCHEMA)
@@ -78,6 +103,15 @@ def init_db() -> None:
             )
         except sqlite3.OperationalError:
             pass  # column already present
+        _rebuild_document_chunks_if_legacy(connection)
+        try:
+            connection.executescript(_FTS_SCHEMA)
+        except sqlite3.OperationalError:
+            # This SQLite build lacks the FTS5 extension. The schema above
+            # already succeeded, so the rest of the service still starts;
+            # search_index_available() reports the gap so the search path
+            # can degrade explicitly instead of failing startup entirely.
+            pass
 
 
 def create_job(job_id: str, document_id: str | None) -> None:
@@ -201,11 +235,21 @@ def get_document(document_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def _doc_token(document_id: str) -> str:
+    """A single searchable FTS5 term identifying one document.
+
+    Stripping the `doc_` prefix leaves the 12 hex characters, which tokenize
+    as one term -- unlike `document_id` itself, which isn't indexed at all.
+    """
+    return document_id.removeprefix("doc_")
+
+
 def index_document_chunks(document_id: str, chunks: list[Chunk]) -> None:
     """Atomically replace the searchable chunks for one document."""
     rows = [
         (
             document_id,
+            _doc_token(document_id),
             chunk.chunk_id,
             position,
             " > ".join(chunk.section_path),
@@ -216,14 +260,25 @@ def index_document_chunks(document_id: str, chunks: list[Chunk]) -> None:
         )
         for position, chunk in enumerate(chunks)
     ]
-    with connect() as connection:
-        connection.execute("DELETE FROM document_chunks WHERE document_id = ?", (document_id,))
-        connection.executemany(
-            "INSERT INTO document_chunks"
-            " (document_id, chunk_id, position, section, section_path, text, pages,"
-            "  estimated_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            rows,
-        )
+    try:
+        with connect() as connection:
+            connection.execute(
+                "DELETE FROM document_chunks WHERE document_id = ?", (document_id,)
+            )
+            connection.executemany(
+                "INSERT INTO document_chunks"
+                " (document_id, doc_token, chunk_id, position, section, section_path, text,"
+                "  pages, estimated_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+    except sqlite3.OperationalError as exc:
+        if "no such table: document_chunks" not in str(exc):
+            raise
+        # This SQLite build lacks FTS5, so document_chunks was never
+        # created (see init_db()). Skip indexing rather than failing the
+        # conversion job that called this -- search degrades to 503
+        # instead.
+        return
 
 
 def _decode_chunk_row(row: sqlite3.Row, *, score: float | None = None) -> dict:
@@ -238,7 +293,19 @@ def _decode_chunk_row(row: sqlite3.Row, *, score: float | None = None) -> dict:
 
 
 def search_document_chunks(document_id: str, query: str, limit: int) -> list[dict]:
-    """Return direct FTS matches ordered by SQLite BM25 relevance."""
+    """Return direct FTS matches ordered by SQLite BM25 relevance.
+
+    Without a `doc_token:` filter, FTS5 resolves MATCH across every row of
+    every document before the `AND document_id = ?` clause below trims it --
+    O(corpus), not O(one document). Folding the token into the MATCH
+    expression itself lets FTS5's index narrow the candidate set up front.
+    The user's query stays parenthesized so none of its own operators can
+    escape the conjunction and widen the match beyond this document. The
+    `AND document_id = ?` clause stays as a belt-and-braces guarantee -- it
+    is the isolation property already verified independently of this
+    optimization.
+    """
+    match_expression = f"doc_token:{_doc_token(document_id)} AND ({query})"
     with connect() as connection:
         rows = connection.execute(
             "SELECT document_id, chunk_id, position, section, section_path, text, pages,"
@@ -246,7 +313,7 @@ def search_document_chunks(document_id: str, query: str, limit: int) -> list[dic
             " FROM document_chunks"
             " WHERE document_chunks MATCH ? AND document_id = ?"
             " ORDER BY rank, position LIMIT ?",
-            (query, document_id, limit),
+            (match_expression, document_id, limit),
         ).fetchall()
     return [_decode_chunk_row(row, score=-float(row["rank"])) for row in rows]
 

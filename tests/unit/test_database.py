@@ -100,6 +100,58 @@ def test_init_db_migrates_a_database_created_before_cancel_requested_existed(tmp
     assert database.is_cancel_requested("job_legacy") is True
 
 
+def test_init_db_rebuilds_a_document_chunks_index_built_without_doc_token(tmp_path, monkeypatch):
+    """An index built before doc_token existed (0.3.0-pre-fix shape, or the
+    same absence in a 0.2.0 database that never had document_chunks at all)
+    must be rebuilt rather than left stale -- FTS5 virtual tables can't be
+    ALTERed in place, and the index is derived data that can be reindexed."""
+    import sqlite3
+
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "legacy_fts"))
+    legacy_path = database.database_path()
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(legacy_path)
+    try:
+        connection.executescript(
+            """
+            CREATE VIRTUAL TABLE document_chunks USING fts5(
+                document_id UNINDEXED,
+                chunk_id UNINDEXED,
+                position UNINDEXED,
+                section,
+                section_path UNINDEXED,
+                text,
+                pages UNINDEXED,
+                estimated_tokens UNINDEXED
+            );
+            """
+        )
+        connection.execute(
+            "INSERT INTO document_chunks (document_id, chunk_id, position, section,"
+            " section_path, text, pages, estimated_tokens)"
+            " VALUES ('doc_legacy00001', 'doc_legacy00001_c000', 0, '', '[]',"
+            " 'stale legacy row', '[]', 1)"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    database.init_db()
+
+    # The legacy table (and its stale row) is gone -- rebuilt with the
+    # current schema rather than patched in place.
+    assert database.search_document_chunks("doc_legacy00001", "stale", limit=5) == []
+
+    document_id = "doc_legacy00001"
+    database.index_document_chunks(document_id, _chunks(document_id))
+    rows = database.search_document_chunks(document_id, "operational", limit=5)
+    assert len(rows) == 1
+
+    # init_db() stays idempotent once the table is current.
+    database.init_db()
+    assert database.search_document_chunks(document_id, "operational", limit=5) == rows
+
+
 def test_request_cancel_only_flags_unfinished_jobs():
     database.create_job("job_done", "doc_a")
     database.set_job_status("job_done", "succeeded", document_id="doc_a")
@@ -175,6 +227,22 @@ def test_search_is_document_scoped_and_limited():
 
     assert len(rows) == 1
     assert rows[0]["document_id"] == "doc_search"
+
+
+def test_search_match_is_scoped_by_doc_token_not_only_post_filtered():
+    """The AND document_id = ? clause is a belt-and-braces guarantee, but the
+    MATCH expression itself must already be scoped to one document -- a query
+    that happens to name another document's token or content must not pull
+    its rows in before the WHERE clause trims them."""
+    database.index_document_chunks("doc_aaaaaaaaaaaa", _chunks("doc_aaaaaaaaaaaa"))
+    database.index_document_chunks("doc_bbbbbbbbbbbb", _chunks("doc_bbbbbbbbbbbb"))
+
+    rows = database.search_document_chunks(
+        "doc_aaaaaaaaaaaa", "aaaaaaaaaaaa OR bbbbbbbbbbbb OR revenue", limit=10
+    )
+
+    assert rows
+    assert all(row["document_id"] == "doc_aaaaaaaaaaaa" for row in rows)
 
 
 def test_reindex_replaces_old_rows_instead_of_duplicating_them():
