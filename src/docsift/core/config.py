@@ -17,7 +17,6 @@ class Settings(BaseModel):
     data_dir: Path
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     job_workers: int = 2
-    job_timeout_seconds: int = 900
 
 
 def get_settings() -> Settings:
@@ -28,5 +27,4 @@ def get_settings() -> Settings:
         data_dir=data_dir,
         max_upload_bytes=int(os.environ.get("DOCSIFT_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES)),
         job_workers=int(os.environ.get("DOCSIFT_JOB_WORKERS", 2)),
-        job_timeout_seconds=int(os.environ.get("DOCSIFT_JOB_TIMEOUT_SECONDS", 900)),
     )
