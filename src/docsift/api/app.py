@@ -18,7 +18,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from docsift import __version__
@@ -109,6 +112,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(BodySizeLimitMiddleware)
+
+    @app.exception_handler(RequestValidationError)
+    async def _content_safe_validation_error(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        # FastAPI's default handler for a rejected query/body parameter --
+        # e.g. `q` over the search endpoint's max_length -- includes the
+        # rejected value verbatim in an "input" field. That would undo the
+        # point of capping `q`: an overlong query must be rejected without
+        # ever being echoed back. Strip "input" from every validation error
+        # uniformly, not just on the search route, so the same guarantee
+        # holds for any current or future caller-supplied field.
+        errors = [{k: v for k, v in error.items() if k != "input"} for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
     @app.get("/health", response_model=HealthResponse, operation_id="getHealth")
     def health() -> HealthResponse:

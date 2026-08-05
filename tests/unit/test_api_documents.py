@@ -194,13 +194,18 @@ def test_document_search_rejects_invalid_controls_and_queries(client, params):
 
 def test_document_search_rejects_an_overlong_query_quickly(client):
     _, document_id = _upload_and_wait(client)
+    overlong_query = "distinctivemarker" + "x" * 2000
 
     start = time.time()
-    response = client.get(f"/v1/documents/{document_id}/search", params={"q": "x" * 2000})
+    response = client.get(f"/v1/documents/{document_id}/search", params={"q": overlong_query})
     elapsed = time.time() - start
 
     assert response.status_code == 422
     assert elapsed < 1.0
+    # FastAPI's default handler for a rejected Query() parameter echoes the
+    # rejected value verbatim in an "input" field -- that would defeat the
+    # point of capping `q` at all. The app overrides that handler globally.
+    assert "distinctivemarker" not in response.text
 
 
 def test_search_existence_check_does_not_load_the_full_stored_result(client, monkeypatch):
