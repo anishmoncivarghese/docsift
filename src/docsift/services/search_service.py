@@ -29,6 +29,10 @@ def _normalize_query(query: str) -> str:
     return "".join(normalized)
 
 
+_MAX_QUERY_LENGTH = 1024
+_MAX_QUERY_TERMS = 64
+
+
 def _validate_controls(limit: int, max_tokens: int, context: int) -> None:
     if not 1 <= limit <= 20:
         raise SearchQueryError("limit must be between 1 and 20")
@@ -73,6 +77,13 @@ def search_document(
     normalized_query = _normalize_query(query)
     if not normalized_query:
         raise SearchQueryError("query must not be blank")
+    # Cost is quadratic in term count against SQLite FTS5, so bound both
+    # length and term count before any query touches the database -- a
+    # pasted page of text must fail cheaply, not after paying for the scan.
+    if len(normalized_query) > _MAX_QUERY_LENGTH:
+        raise SearchQueryError("query is too long")
+    if len(normalized_query.split()) > _MAX_QUERY_TERMS:
+        raise SearchQueryError("query has too many terms")
     _validate_controls(limit, max_tokens, context)
 
     try:

@@ -192,6 +192,19 @@ def test_document_search_rejects_invalid_controls_and_queries(client, params):
     assert "unterminated" not in response.text
 
 
+def test_document_search_rejects_an_overlong_query_quickly(client):
+    _, document_id = _upload_and_wait(client)
+
+    start = time.time()
+    response = client.get(
+        f"/v1/documents/{document_id}/search", params={"q": "x" * 2000}
+    )
+    elapsed = time.time() - start
+
+    assert response.status_code == 422
+    assert elapsed < 1.0
+
+
 def test_search_endpoint_has_stable_openapi_contract(client):
     operation = client.get("/openapi.json").json()["paths"]["/v1/documents/{document_id}/search"][
         "get"

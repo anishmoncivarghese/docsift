@@ -247,7 +247,9 @@ def create_app() -> FastAPI:
     )
     def search_document_endpoint(
         document_id: str,
-        q: Annotated[str, Query(min_length=1, description="Keyword or quoted phrase")],
+        q: Annotated[
+            str, Query(min_length=1, max_length=1024, description="Keyword or quoted phrase")
+        ],
         limit: Annotated[int, Query(ge=1, le=20)] = 5,
         max_tokens: Annotated[int, Query(ge=1, le=20_000)] = 5000,
         context: Annotated[int, Query(ge=0, le=2)] = 0,

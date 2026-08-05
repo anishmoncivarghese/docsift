@@ -116,6 +116,16 @@ def test_blank_query_is_rejected(query):
         search_document("doc_abc123def456", query)
 
 
+def test_overlong_query_is_rejected_without_running_the_search():
+    with pytest.raises(SearchQueryError, match="query is too long"):
+        search_document("doc_abc123def456", "x" * 2000)
+
+
+def test_query_with_too_many_terms_is_rejected():
+    with pytest.raises(SearchQueryError, match="query has too many terms"):
+        search_document("doc_abc123def456", " ".join(["term"] * 100))
+
+
 def test_invalid_fts_syntax_is_hidden_behind_a_content_safe_error():
     document_id = _index()
 
