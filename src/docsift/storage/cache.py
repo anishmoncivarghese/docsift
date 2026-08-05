@@ -98,3 +98,26 @@ def clear_cache() -> int:
             continue
         removed += 1
     return removed
+
+
+def delete_entries_for_document(document_id: str) -> int:
+    """Remove every cached result for one document. Returns how many were removed.
+
+    Cache keys are derived from content plus engine and option versions, so one
+    document can have several entries and none of them is addressable by id --
+    the entries have to be read to be matched. Deletion is rare and
+    user-initiated, so the scan is worth it: a cached copy that outlives an
+    explicit delete would make the content recoverable by re-uploading the same
+    bytes (NFR-05).
+    """
+    removed = 0
+    for entry in cache_entries():
+        result = load_cached(entry.stem)
+        if result is None or result.document_id != document_id:
+            continue
+        try:
+            entry.unlink()
+        except OSError:
+            continue
+        removed += 1
+    return removed

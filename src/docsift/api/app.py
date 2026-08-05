@@ -32,7 +32,7 @@ from docsift.core.exceptions import ServiceUnavailableError, UnsupportedFileErro
 from docsift.core.models import ConversionResult
 from docsift.engines.router import SUPPORTED_SUFFIXES
 from docsift.services import job_service
-from docsift.storage import database, documents
+from docsift.storage import cache, database, documents
 
 _CHUNK = 1 << 20
 
@@ -226,8 +226,11 @@ def create_app() -> FastAPI:
             removed_files = documents.delete_document_files(document_id)
         except UnsupportedFileError:
             raise HTTPException(status_code=404, detail="document not found") from None
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="failed to delete document") from exc
         removed_row = database.delete_document(document_id)
-        if not (removed_files or removed_row):
+        removed_cache = cache.delete_entries_for_document(document_id)
+        if not (removed_files or removed_row or removed_cache):
             raise HTTPException(status_code=404, detail="document not found")
         return Response(status_code=204)
 

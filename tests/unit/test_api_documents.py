@@ -121,6 +121,9 @@ def test_unknown_document_is_404(client):
 @pytest.mark.parametrize("bad_id", ["not-a-doc-id", "doc_ABCDEF123456", "doc_short"])
 def test_malformed_document_id_is_404_not_500(client, bad_id):
     assert client.get(f"/v1/documents/{bad_id}").status_code == 404
+    assert client.get(f"/v1/documents/{bad_id}/markdown").status_code == 404
+    assert client.get(f"/v1/documents/{bad_id}/chunks").status_code == 404
+    assert client.delete(f"/v1/documents/{bad_id}").status_code == 404
 
 
 def test_reuploading_the_same_file_returns_the_same_document(client):
@@ -169,3 +172,40 @@ def test_failed_job_still_carries_document_id(client):
         assert body["document_id"] == document_id
     finally:
         register_engine("markitdown", OkEngine)
+
+
+def test_delete_also_purges_the_cached_copy(client):
+    from docsift.storage.cache import cache_entries, load_cached
+
+    _, document_id = _upload_and_wait(client)
+    assert any(
+        (result := load_cached(entry.stem)) is not None and result.document_id == document_id
+        for entry in cache_entries()
+    )
+    assert client.delete(f"/v1/documents/{document_id}").status_code == 204
+    assert not any(
+        (result := load_cached(entry.stem)) is not None and result.document_id == document_id
+        for entry in cache_entries()
+    )
+
+
+def test_reuploading_after_delete_reconverts_rather_than_resurrecting(client):
+    _, document_id = _upload_and_wait(client)
+    assert client.delete(f"/v1/documents/{document_id}").status_code == 204
+    _, second = _upload_and_wait(client)
+    assert second == document_id
+    assert client.get(f"/v1/documents/{document_id}").status_code == 200
+
+
+def test_delete_failure_returns_json_500_not_a_bare_error(client, monkeypatch):
+    from docsift.storage import documents
+
+    _, document_id = _upload_and_wait(client)
+
+    def _raise(directory):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(documents.shutil, "rmtree", _raise)
+    response = client.delete(f"/v1/documents/{document_id}")
+    assert response.status_code == 500
+    assert response.json()["detail"] == "failed to delete document"
