@@ -72,6 +72,28 @@ def text_file(tmp_path: Path) -> Path:
     return file
 
 
+def _sparse_file(path: Path, size_bytes: int) -> Path:
+    """A file that reports `size_bytes` via stat() without writing that much data."""
+    with path.open("wb") as handle:
+        handle.seek(size_bytes - 1)
+        handle.write(b"\0")
+    return path
+
+
+def test_default_ceiling_still_rejects_a_file_over_50mb(stub_engine, tmp_path, monkeypatch):
+    monkeypatch.delenv("DOCSIFT_MAX_UPLOAD_BYTES", raising=False)
+    big_file = _sparse_file(tmp_path / "big.txt", 51 * 1024 * 1024)
+    with pytest.raises(UnsupportedFileError, match="maximum is"):
+        convert_document(big_file, use_cache=False)
+
+
+def test_max_upload_bytes_env_var_can_raise_the_ceiling(stub_engine, tmp_path, monkeypatch):
+    monkeypatch.setenv("DOCSIFT_MAX_UPLOAD_BYTES", str(60 * 1024 * 1024))
+    big_file = _sparse_file(tmp_path / "big.txt", 55 * 1024 * 1024)
+    result = convert_document(big_file, use_cache=False)
+    assert isinstance(result, ConversionResult)
+
+
 def test_returns_normalized_result(stub_engine, text_file):
     result = convert_document(text_file)
     assert isinstance(result, ConversionResult)

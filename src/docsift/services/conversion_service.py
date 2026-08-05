@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from docsift import __version__
+from docsift.core.config import get_settings
 from docsift.core.exceptions import ConversionFailedError, DocSiftError, UnsupportedFileError
 from docsift.core.models import (
     ConversionMetadata,
@@ -22,8 +23,6 @@ from docsift.processing.cleaner import build_clean_plan, clean_excerpt, clean_ma
 from docsift.processing.token_estimator import estimate_tokens
 from docsift.storage.cache import cache_key, load_cached, store_cached
 
-MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
-
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -35,13 +34,18 @@ def _sha256(path: Path) -> str:
 
 def _validate(path: Path) -> int:
     if not path.is_file():
-        raise UnsupportedFileError(f"not a file: {path}")
+        raise UnsupportedFileError(f"not a file: {path.name}")
     size = path.stat().st_size
     if size == 0:
-        raise UnsupportedFileError(f"file is empty: {path}")
-    if size > MAX_FILE_SIZE_BYTES:
+        raise UnsupportedFileError(f"file is empty: {path.name}")
+    # Read the ceiling from settings (default: Settings.max_upload_bytes,
+    # 50 MB) rather than a hardcoded module constant, so
+    # DOCSIFT_MAX_UPLOAD_BYTES can raise it, not just lower it -- the CLI
+    # path enforces the same default since it reads the same settings.
+    max_bytes = get_settings().max_upload_bytes
+    if size > max_bytes:
         raise UnsupportedFileError(
-            f"file is {size} bytes; maximum is {MAX_FILE_SIZE_BYTES} (50 MB)"
+            f"file is {size} bytes; maximum is {max_bytes} ({max_bytes // (1024 * 1024)} MB)"
         )
     suffix = path.suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
