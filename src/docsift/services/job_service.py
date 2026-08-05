@@ -81,8 +81,14 @@ def _run(
             # The client deleted this document while it was converting. Storing
             # now would resurrect it, so drop the cache entry convert_document
             # just wrote and record the job as cancelled.
-            cache.delete_entries_for_document(result.document_id)
-            database.set_job_status(job_id, "failed", error="cancelled by delete")
+            _removed, cache_failed = cache.delete_entries_for_document(result.document_id)
+            error = "cancelled by delete"
+            if cache_failed:
+                # The cache entry convert_document just wrote could not be
+                # purged -- content-safe to say so, since this names no
+                # document content.
+                error += " (cache purge failed)"
+            database.set_job_status(job_id, "failed", error=error)
             return
         # convert_document derives source.filename from source_path.name -- the
         # temp file's name, since it never sees the client's original filename.

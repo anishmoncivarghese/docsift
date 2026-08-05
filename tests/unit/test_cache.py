@@ -39,6 +39,40 @@ def text_file(tmp_path: Path) -> Path:
     return file
 
 
+def test_delete_entries_for_document_reports_removed_count(counting_engine, text_file):
+    from docsift.storage.cache import delete_entries_for_document
+
+    result = convert_document(text_file)
+    removed, failed = delete_entries_for_document(result.document_id)
+    assert removed == 1
+    assert failed == 0
+
+
+def test_delete_entries_for_document_reports_failures_instead_of_swallowing_them(
+    counting_engine, text_file, monkeypatch
+):
+    """A cache entry that can't be unlinked (permissions, a concurrent
+    process holding it, ...) must be reported, not silently skipped --
+    swallowing it would let a DELETE return success while a readable copy
+    of the document survives on disk."""
+    from pathlib import Path as PathlibPath
+
+    from docsift.storage.cache import delete_entries_for_document
+
+    result = convert_document(text_file)
+    original_unlink = PathlibPath.unlink
+
+    def _raise(self, *args, **kwargs):
+        if self.suffix == ".json":
+            raise OSError("simulated permission failure")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(PathlibPath, "unlink", _raise)
+    removed, failed = delete_entries_for_document(result.document_id)
+    assert removed == 0
+    assert failed == 1
+
+
 def test_second_conversion_hits_cache(counting_engine, text_file):
     first = convert_document(text_file)
     second = convert_document(text_file)

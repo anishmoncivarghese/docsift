@@ -240,7 +240,11 @@ def create_app() -> FastAPI:
         except OSError as exc:
             raise HTTPException(status_code=500, detail="failed to delete document") from exc
         removed_row = database.delete_document(document_id)
-        removed_cache = cache.delete_entries_for_document(document_id)
+        removed_cache, failed_cache = cache.delete_entries_for_document(document_id)
+        if failed_cache:
+            # A readable copy may still exist in the cache -- reporting 204
+            # here would say deletion succeeded when it didn't necessarily.
+            raise HTTPException(status_code=500, detail="failed to purge cached copies")
         if cancelled and not (removed_files or removed_row or removed_cache):
             # Nothing existed yet to delete, but a job was in flight -- a 404
             # would tell the client something false (that there was never

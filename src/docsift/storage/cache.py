@@ -100,8 +100,8 @@ def clear_cache() -> int:
     return removed
 
 
-def delete_entries_for_document(document_id: str) -> int:
-    """Remove every cached result for one document. Returns how many were removed.
+def delete_entries_for_document(document_id: str) -> tuple[int, int]:
+    """Remove every cached result for one document. Returns (removed, failed).
 
     Cache keys are derived from content plus engine and option versions, so one
     document can have several entries and none of them is addressable by id --
@@ -109,8 +109,14 @@ def delete_entries_for_document(document_id: str) -> int:
     user-initiated, so the scan is worth it: a cached copy that outlives an
     explicit delete would make the content recoverable by re-uploading the same
     bytes (NFR-05).
+
+    A per-file OSError is counted in `failed` rather than swallowed: silently
+    skipping it would let a caller report success (204) while a readable copy
+    of the document still sits in the cache -- directly undercutting the
+    "deletion is genuine" promise.
     """
     removed = 0
+    failed = 0
     for entry in cache_entries():
         result = load_cached(entry.stem)
         if result is None or result.document_id != document_id:
@@ -118,6 +124,7 @@ def delete_entries_for_document(document_id: str) -> int:
         try:
             entry.unlink()
         except OSError:
+            failed += 1
             continue
         removed += 1
-    return removed
+    return removed, failed

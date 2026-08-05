@@ -272,3 +272,17 @@ def test_delete_failure_returns_json_500_not_a_bare_error(client, monkeypatch):
     response = client.delete(f"/v1/documents/{document_id}")
     assert response.status_code == 500
     assert response.json()["detail"] == "failed to delete document"
+
+
+def test_delete_reports_500_when_a_cache_purge_fails(client, monkeypatch):
+    """A cache entry that can't be unlinked must not be swallowed into a
+    204 -- that would claim deletion succeeded while a readable copy of the
+    document could still sit in the cache."""
+    from docsift.storage import cache
+
+    _, document_id = _upload_and_wait(client)
+
+    monkeypatch.setattr(cache, "delete_entries_for_document", lambda doc_id: (0, 1))
+    response = client.delete(f"/v1/documents/{document_id}")
+    assert response.status_code == 500
+    assert response.json()["detail"] == "failed to purge cached copies"
