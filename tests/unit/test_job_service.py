@@ -122,6 +122,24 @@ def test_failed_job_error_names_the_original_filename_not_the_temp_copy(tmp_path
     assert "q3-report.pdf" in (record.error or "")
 
 
+def test_startup_sweeps_orphaned_uploads_left_by_a_crashed_process(tmp_path):
+    """A process killed between writing a temp upload and _run's finally
+    block (which normally unlinks it) leaves the original sitting in
+    uploads/ forever -- nothing else ever revisits it. startup() runs before
+    this process has accepted any work of its own, so anything already in
+    uploads/ at that point cannot belong to a job this process is running."""
+    from docsift.core.config import get_settings
+
+    uploads = get_settings().data_dir / "uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    orphan = uploads / "tmpabc123.pdf"
+    orphan.write_bytes(b"leftover from a crashed process")
+
+    job_service.startup()
+
+    assert not orphan.exists()
+
+
 def test_unknown_job_is_none():
     assert job_service.get("job_missing") is None
 

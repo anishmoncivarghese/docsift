@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from docsift.core.config import Settings, get_settings
 
 
@@ -8,6 +10,7 @@ def test_defaults_when_no_env(monkeypatch):
         "DOCSIFT_DATA_DIR",
         "DOCSIFT_MAX_UPLOAD_BYTES",
         "DOCSIFT_JOB_WORKERS",
+        "DOCSIFT_MAX_PENDING_JOBS",
     ):
         monkeypatch.delenv(name, raising=False)
     settings = get_settings()
@@ -15,16 +18,37 @@ def test_defaults_when_no_env(monkeypatch):
     assert settings.data_dir == Path.home() / ".local" / "share" / "docsift"
     assert settings.max_upload_bytes == 50 * 1024 * 1024
     assert settings.job_workers == 2
+    assert settings.max_pending_jobs == 32
 
 
 def test_env_overrides_are_read_at_call_time(monkeypatch, tmp_path):
     monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("DOCSIFT_MAX_UPLOAD_BYTES", "1024")
     monkeypatch.setenv("DOCSIFT_JOB_WORKERS", "5")
+    monkeypatch.setenv("DOCSIFT_MAX_PENDING_JOBS", "8")
     settings = get_settings()
     assert settings.data_dir == tmp_path / "data"
     assert settings.max_upload_bytes == 1024
     assert settings.job_workers == 5
+    assert settings.max_pending_jobs == 8
+
+
+@pytest.mark.parametrize(
+    "name", ["DOCSIFT_MAX_UPLOAD_BYTES", "DOCSIFT_JOB_WORKERS", "DOCSIFT_MAX_PENDING_JOBS"]
+)
+def test_non_integer_env_var_names_the_offending_variable(monkeypatch, name):
+    monkeypatch.setenv(name, "not-a-number")
+    with pytest.raises(ValueError, match=name):
+        get_settings()
+
+
+@pytest.mark.parametrize(
+    "name", ["DOCSIFT_MAX_UPLOAD_BYTES", "DOCSIFT_JOB_WORKERS", "DOCSIFT_MAX_PENDING_JOBS"]
+)
+def test_non_positive_env_var_names_the_offending_variable(monkeypatch, name):
+    monkeypatch.setenv(name, "0")
+    with pytest.raises(ValueError, match=name):
+        get_settings()
 
 
 def test_job_timeout_setting_was_removed_as_dead(monkeypatch):

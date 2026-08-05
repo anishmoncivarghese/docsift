@@ -43,6 +43,25 @@ def startup() -> None:
     """Prepare the store and reconcile jobs abandoned by a previous process."""
     database.init_db()
     database.fail_stale_jobs()
+    _sweep_orphaned_uploads()
+
+
+def _sweep_orphaned_uploads() -> None:
+    """Remove upload originals a crashed process never got to clean up.
+
+    `_run`'s `finally` unlinks the temp copy after every job, win or lose --
+    the only way one survives is a process that died before that ran. This is
+    called before this process has accepted any work of its own, so anything
+    already sitting in uploads/ at this point cannot belong to a job it is
+    running; it's safe to sweep the lot.
+    """
+    uploads = get_settings().data_dir / "uploads"
+    if not uploads.is_dir():
+        return
+    for entry in uploads.iterdir():
+        if entry.is_file():
+            with contextlib.suppress(OSError):
+                entry.unlink()
 
 
 def shutdown() -> None:

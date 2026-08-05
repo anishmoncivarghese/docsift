@@ -125,9 +125,13 @@ def create_app() -> FastAPI:
         # never becomes a path component, so `../../evil.txt` cannot escape.
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:
+            # The suffix is caller-controlled (it's derived from the
+            # uploaded filename), so bound how much of it gets echoed back
+            # rather than reflecting an arbitrarily long value verbatim.
+            display_suffix = suffix if len(suffix) <= 40 else suffix[:40] + "..."
             raise HTTPException(
                 status_code=415,
-                detail=f"unsupported file type '{suffix}'",
+                detail=f"unsupported file type {display_suffix!r}",
             )
         # Validated before anything is written to disk, and the offending
         # value is never echoed back: an anonymous caller could otherwise post
@@ -168,6 +172,13 @@ def create_app() -> FastAPI:
         except ServiceUnavailableError as exc:
             target.unlink(missing_ok=True)
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception:
+            # Any failure here means no job was queued to eventually clean
+            # this up itself (_run's finally only runs for jobs that actually
+            # started) -- unlink before propagating or the original leaks
+            # into data_dir/uploads indefinitely.
+            target.unlink(missing_ok=True)
+            raise
         return JobAccepted(job_id=job_id, document_id=document_id, status="queued")
 
     def _load_or_404(document_id: str) -> ConversionResult:

@@ -245,6 +245,33 @@ def test_pending_job_backlog_over_the_ceiling_returns_503(client, monkeypatch):
         unregister_engine("markitdown")
 
 
+def test_temp_upload_is_removed_when_submit_raises_any_exception(
+    client, engine, tmp_path, monkeypatch
+):
+    """Only ServiceUnavailableError unlinked the temp upload before this fix --
+    any other exception out of job_service.submit (e.g. a database error)
+    would leak the uploaded original into data_dir/uploads forever."""
+    from docsift.services import job_service
+
+    def _explode(*args, **kwargs):
+        raise RuntimeError("simulated submit failure")
+
+    monkeypatch.setattr(job_service, "submit", _explode)
+    with pytest.raises(RuntimeError):
+        client.post("/v1/documents", files={"file": ("note.txt", b"hello world", "text/plain")})
+    uploads = tmp_path / "data" / "uploads"
+    assert not uploads.exists() or list(uploads.iterdir()) == []
+
+
+def test_unsupported_extension_415_does_not_echo_a_huge_suffix(client, engine):
+    huge_suffix = "." + "x" * 2000
+    response = client.post(
+        "/v1/documents", files={"file": (f"note{huge_suffix}", b"data", "text/plain")}
+    )
+    assert response.status_code == 415
+    assert len(response.text) < 200
+
+
 def test_importing_the_app_pulls_no_engine_modules():
     import subprocess
     import sys
