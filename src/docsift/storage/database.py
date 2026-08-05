@@ -262,9 +262,7 @@ def index_document_chunks(document_id: str, chunks: list[Chunk]) -> None:
     ]
     try:
         with connect() as connection:
-            connection.execute(
-                "DELETE FROM document_chunks WHERE document_id = ?", (document_id,)
-            )
+            connection.execute("DELETE FROM document_chunks WHERE document_id = ?", (document_id,))
             connection.executemany(
                 "INSERT INTO document_chunks"
                 " (document_id, doc_token, chunk_id, position, section, section_path, text,"

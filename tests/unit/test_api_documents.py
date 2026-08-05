@@ -196,9 +196,7 @@ def test_document_search_rejects_an_overlong_query_quickly(client):
     _, document_id = _upload_and_wait(client)
 
     start = time.time()
-    response = client.get(
-        f"/v1/documents/{document_id}/search", params={"q": "x" * 2000}
-    )
+    response = client.get(f"/v1/documents/{document_id}/search", params={"q": "x" * 2000})
     elapsed = time.time() - start
 
     assert response.status_code == 422

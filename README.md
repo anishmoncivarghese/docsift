@@ -6,7 +6,7 @@ DocSift converts PDFs and Office documents into clean, structured, AI-ready
 Markdown and JSON — locally, with no cloud APIs. Docling handles PDFs;
 MarkItDown handles the breadth formats; both sit behind one interface.
 
-**v0.2.0**
+**v0.3.0**
 
 ## Install
 
@@ -68,6 +68,10 @@ FTS5 keyword ranking and supports quoted phrases:
 up to two adjacent chunks on each side, and `--max-tokens` caps the complete
 returned result set. Context chunks are marked separately from direct matches.
 The command prints only selected chunks, never the document's complete Markdown.
+
+`score` orders results within a single response only -- it is not comparable
+across separate requests or over time. BM25 statistics are corpus-wide, so a
+score's magnitude drifts as unrelated documents are indexed or removed.
 
 The search index belongs to `DOCSIFT_DATA_DIR` and is populated by successful
 API conversion jobs. `docsift convert`, which writes standalone files to an
@@ -179,10 +183,20 @@ as a volume.
   it directly to the internet.
 - Search is lexical SQLite FTS5 retrieval, not semantic search: it does not
   understand synonyms, correct spelling, or match concepts absent from the
-  indexed words. Local embeddings and hybrid retrieval are planned for v0.3
-  only if benchmarks justify their model and storage cost.
+  indexed words. Local embeddings and hybrid retrieval remain planned for a
+  future release only if benchmarks justify their model and storage cost.
 - Search is scoped to one document at a time. Cross-document search is not
-  implemented.
+  implemented, and per-document search cost still grows somewhat with the
+  total number of indexed documents.
+- Documents converted before this release are not in the search index;
+  `/search` returns `409` for one until it's re-uploaded to index it.
+- Search queries are capped at 1024 characters and 64 terms.
+- Page-number filtering is not supported, even though pages are returned
+  with each search result.
+- A `max_tokens` smaller than the first result returns an empty result set.
+- Deleted document text can remain in unvacuumed SQLite free pages until the
+  database is `VACUUM`ed -- this release is the first to store document text
+  inside `docsift.db` (the search index), not just in the filesystem.
 - `POST /v1/compare` is not implemented yet.
 - Single-process only. Running two instances (or `uvicorn --workers 2`)
   against the same `DOCSIFT_DATA_DIR` makes each instance's startup mark the

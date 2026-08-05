@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-08-05
 
 Adds local keyword and phrase retrieval (Milestone 5).
 
@@ -10,13 +10,32 @@ Adds local keyword and phrase retrieval (Milestone 5).
 - `GET /v1/documents/{id}/search` returns BM25-ranked chunks with page, section,
   token, score, match, and context metadata. `limit`, `max_tokens`, and `context`
   bound the response so the endpoint never falls back to returning full Markdown.
+  `context=N` is a caller-supplied symmetric window of `N` adjacent chunks on
+  each side of a direct match (default 0) -- this is the shipped context
+  expansion, not the conditional heuristics FR-11 describes; treat FR-11 as not
+  yet implemented.
 - `docsift search DOCUMENT_ID QUERY` exposes the same retrieval path locally,
   including quoted phrases and context controls.
 - Invalid search syntax returns a stable, content-safe error instead of exposing
-  SQLite details or echoing the query.
+  SQLite details or echoing the query. Search queries are capped at 1024
+  characters and 64 terms, rejected before any query runs; infrastructure faults
+  (a missing table, a locked or corrupted database) are no longer misreported as
+  invalid queries.
+- A document with chunks but no search index -- most commonly one converted
+  before this release -- now returns `409` from `/search` instead of a
+  200 empty result set indistinguishable from a genuine no-match.
+- The FTS5 match is now scoped to the target document via an indexed token,
+  instead of resolving across every document's rows before filtering; search
+  latency no longer grows with the size of the rest of the corpus.
+- The search endpoint's existence check now uses the document metadata row
+  instead of parsing the complete stored result, so `/search` is no longer
+  more expensive than `/chunks`.
+- On a SQLite build without the FTS5 extension, the service still starts and
+  every other endpoint still works; only `/search` returns `503`, and
+  conversions no longer fail trying to index into a table that doesn't exist.
 - Search remains fully local and dependency-free beyond SQLite. It is lexical
-  rather than semantic; hybrid retrieval remains planned for v0.3 only if
-  benchmarks justify it.
+  rather than semantic; hybrid retrieval remains planned for a future release
+  only if benchmarks justify it.
 
 ## 0.2.0 — 2026-08-05
 
@@ -57,7 +76,7 @@ Adds an HTTP API.
   image, declares `/data` as a volume, and adds a `HEALTHCHECK`.
 - OpenAPI at `/openapi.json`, with stable operation ids for connector imports.
 
-`POST /v1/compare` is not implemented yet.
+Search (`/v1/documents/{id}/search`) and `POST /v1/compare` are not implemented yet.
 
 ## 0.1.1 — 2026-08-03
 
