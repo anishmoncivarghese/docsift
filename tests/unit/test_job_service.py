@@ -96,6 +96,32 @@ def test_upload_copy_is_removed_after_the_job(upload):
     assert not upload.exists()
 
 
+def test_failed_job_error_names_the_original_filename_not_the_temp_copy(tmp_path):
+    """conversion_service only ever sees the server-side temp copy, so a
+    ConversionFailedError it raises quotes the temp file's generated name
+    (e.g. 'tmpwnsd410q.pdf'), not the name the client uploaded. _run must swap
+    that back to the client's filename before the error is stored and served
+    by GET /v1/jobs/{id} -- otherwise a user who uploaded 'q3-report.pdf' is
+    told a file they never named failed, and the temp-naming scheme leaks."""
+
+    class RaisingEngine(OkEngine):
+        def convert(self, path: Path, options=None) -> EngineOutput:
+            raise RuntimeError("boom")
+
+    source = tmp_path / "tmpxyz123.pdf"
+    source.write_text("hello world", encoding="utf-8")
+
+    register_engine("markitdown", RaisingEngine)
+    try:
+        job_id, _ = job_service.submit(source, "q3-report.pdf", engine="markitdown")
+        assert _await_job(job_id) == "failed"
+    finally:
+        unregister_engine("markitdown")
+    record = job_service.get(job_id)
+    assert "tmpxyz123" not in (record.error or "")
+    assert "q3-report.pdf" in (record.error or "")
+
+
 def test_unknown_job_is_none():
     assert job_service.get("job_missing") is None
 

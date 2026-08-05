@@ -103,8 +103,16 @@ def _run(
         )
         database.set_job_status(job_id, "succeeded", document_id=result.document_id)
     except DocSiftError as exc:
-        # DocSift's own errors are content-safe by construction.
-        database.set_job_status(job_id, "failed", error=str(exc))
+        # DocSift's own errors are content-safe by construction, but
+        # ConversionFailedError quotes path.name of whatever convert_document
+        # was given -- the server-generated temp filename, since
+        # conversion_service never sees the client's original name. Swap it
+        # for the name the client actually used before it's stored and served
+        # back by GET /v1/jobs/{id}; a straight substring replace is enough
+        # since we know the exact temp name and don't need to parse the
+        # message.
+        message = str(exc).replace(source_path.name, filename)
+        database.set_job_status(job_id, "failed", error=message)
     except Exception as exc:
         # Anything else may quote document content: record the type name only.
         database.set_job_status(job_id, "failed", error=type(exc).__name__)
