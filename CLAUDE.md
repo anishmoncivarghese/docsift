@@ -16,7 +16,7 @@ The product owner is a non-technical founder: explain trade-offs in plain langua
 
 ```bash
 uv sync --all-extras            # install with both engines (docling is large)
-uv sync --extra markitdown      # lighter install (what CI uses)
+uv sync --extra markitdown --extra api   # lighter install (what CI uses — no docling)
 uv run pytest                   # unit tests (integration excluded by default)
 uv run pytest -m integration    # real-engine tests (docling downloads models on first run)
 uv run ruff check . && uv run ruff format --check .
