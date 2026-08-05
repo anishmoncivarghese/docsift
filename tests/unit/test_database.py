@@ -1,5 +1,6 @@
 import pytest
 
+from docsift.core.models import Chunk
 from docsift.storage import database
 
 
@@ -114,3 +115,105 @@ def test_set_job_status_truncates_long_error_text():
     database.create_job("job_long_error", None)
     database.set_job_status("job_long_error", "failed", error="x" * 10_000)
     assert len(database.get_job("job_long_error")["error"]) == 500
+
+
+def _chunks(document_id: str = "doc_search") -> list[Chunk]:
+    return [
+        Chunk(
+            chunk_id=f"{document_id}_c000",
+            text="Quarterly revenue increased strongly.",
+            estimated_tokens=8,
+            section_path=["Financial Results", "Revenue"],
+            pages=[2, 3],
+        ),
+        Chunk(
+            chunk_id=f"{document_id}_c001",
+            text="Operational risk controls were reviewed.",
+            estimated_tokens=9,
+            section_path=["Risk Management"],
+            pages=[7],
+        ),
+        Chunk(
+            chunk_id=f"{document_id}_c002",
+            text="Revenue guidance remains unchanged.",
+            estimated_tokens=6,
+            section_path=["Outlook"],
+            pages=[9],
+        ),
+    ]
+
+
+def test_index_and_search_chunks_round_trip_metadata():
+    database.index_document_chunks("doc_search", _chunks())
+
+    rows = database.search_document_chunks("doc_search", "operational", limit=5)
+
+    assert len(rows) == 1
+    assert rows[0]["chunk_id"] == "doc_search_c001"
+    assert rows[0]["position"] == 1
+    assert rows[0]["section_path"] == ["Risk Management"]
+    assert rows[0]["pages"] == [7]
+    assert rows[0]["estimated_tokens"] == 9
+    assert isinstance(rows[0]["score"], float)
+
+
+def test_search_matches_section_headings_and_quoted_phrases():
+    database.index_document_chunks("doc_search", _chunks())
+
+    section_rows = database.search_document_chunks("doc_search", "financial", limit=5)
+    phrase_rows = database.search_document_chunks("doc_search", '"operational risk"', limit=5)
+
+    assert [row["chunk_id"] for row in section_rows] == ["doc_search_c000"]
+    assert [row["chunk_id"] for row in phrase_rows] == ["doc_search_c001"]
+
+
+def test_search_is_document_scoped_and_limited():
+    database.index_document_chunks("doc_search", _chunks())
+    database.index_document_chunks("doc_other", _chunks("doc_other"))
+
+    rows = database.search_document_chunks("doc_search", "revenue", limit=1)
+
+    assert len(rows) == 1
+    assert rows[0]["document_id"] == "doc_search"
+
+
+def test_reindex_replaces_old_rows_instead_of_duplicating_them():
+    database.index_document_chunks("doc_search", _chunks())
+    replacement = [
+        Chunk(
+            chunk_id="doc_search_c000",
+            text="A completely new indexed passage.",
+            estimated_tokens=7,
+        )
+    ]
+    database.index_document_chunks("doc_search", replacement)
+
+    assert database.search_document_chunks("doc_search", "revenue", limit=5) == []
+    rows = database.search_document_chunks("doc_search", "passage", limit=5)
+    assert [row["chunk_id"] for row in rows] == ["doc_search_c000"]
+
+
+def test_get_indexed_chunks_returns_requested_positions_in_document_order():
+    database.index_document_chunks("doc_search", _chunks())
+
+    rows = database.get_indexed_chunks("doc_search", [2, 0])
+
+    assert [row["position"] for row in rows] == [0, 2]
+    assert rows[0]["pages"] == [2, 3]
+
+
+def test_empty_chunk_list_clears_an_existing_index():
+    database.index_document_chunks("doc_search", _chunks())
+    database.index_document_chunks("doc_search", [])
+
+    assert database.search_document_chunks("doc_search", "revenue", limit=5) == []
+
+
+def test_delete_document_also_removes_its_search_index():
+    database.save_document(
+        "doc_search", "report.pdf", "application/pdf", 10, "a" * 64, "docling", "/tmp/r.json"
+    )
+    database.index_document_chunks("doc_search", _chunks())
+
+    assert database.delete_document("doc_search") is True
+    assert database.search_document_chunks("doc_search", "revenue", limit=5) == []

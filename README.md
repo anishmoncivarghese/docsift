@@ -31,6 +31,8 @@ For local development from a clone:
     docsift compare report.pdf
     docsift compare report.pdf --output ./comparison
     docsift inspect report.pdf
+    docsift search doc_xxxxxxxxxxxx "operational risk"
+    docsift search doc_xxxxxxxxxxxx '"operational risk"' --limit 5 --context 1
     docsift cache info
     docsift cache clear
 
@@ -53,6 +55,24 @@ references) and splits it into token-budgeted chunks with heading context:
 Results are cached in `~/.cache/docsift` (override with `DOCSIFT_CACHE_DIR`);
 an unchanged file with unchanged settings returns instantly.
 
+## Search
+
+Search runs fully locally over chunks stored by the HTTP service. It uses SQLite
+FTS5 keyword ranking and supports quoted phrases:
+
+    docsift search doc_xxxxxxxxxxxx "operational risk"
+    docsift search doc_xxxxxxxxxxxx '"operational risk"' --limit 5
+    docsift search doc_xxxxxxxxxxxx "risk" --context 1 --max-tokens 5000
+
+`--limit` controls direct matches (default 5, maximum 20). `--context` includes
+up to two adjacent chunks on each side, and `--max-tokens` caps the complete
+returned result set. Context chunks are marked separately from direct matches.
+The command prints only selected chunks, never the document's complete Markdown.
+
+The search index belongs to `DOCSIFT_DATA_DIR` and is populated by successful
+API conversion jobs. `docsift convert`, which writes standalone files to an
+output directory, does not add those files to the service's document store.
+
 ## HTTP API
 
     pip install "docsift[all]"   # api extra alone pulls no conversion engine -- see Install
@@ -69,6 +89,18 @@ Then convert a document asynchronously:
     # then fetch the result
     curl -sS http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/markdown
     curl -sS http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/chunks
+
+    # keyword search (five direct matches, at most 5,000 returned tokens)
+    curl -sS --get \
+      --data-urlencode 'q=operational risk' \
+      --data 'limit=5' --data 'max_tokens=5000' \
+      http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/search
+
+    # exact phrase plus one neighboring chunk on each side
+    curl -sS --get \
+      --data-urlencode 'q="operational risk"' \
+      --data 'context=1' \
+      http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/search
 
 Conversion always runs in the background — a long PDF can take minutes, and
 clients that assume a synchronous response will time out. The OpenAPI document
@@ -145,7 +177,13 @@ as a volume.
   that case.
 - The API has no authentication, rate limiting or multi-tenancy. Do not expose
   it directly to the internet.
-- Search and comparison endpoints are not implemented yet.
+- Search is lexical SQLite FTS5 retrieval, not semantic search: it does not
+  understand synonyms, correct spelling, or match concepts absent from the
+  indexed words. Local embeddings and hybrid retrieval are planned for v0.3
+  only if benchmarks justify their model and storage cost.
+- Search is scoped to one document at a time. Cross-document search is not
+  implemented.
+- `POST /v1/compare` is not implemented yet.
 - Single-process only. Running two instances (or `uvicorn --workers 2`)
   against the same `DOCSIFT_DATA_DIR` makes each instance's startup mark the
   *other* instance's live jobs as `failed`/`interrupted`, since each assumes

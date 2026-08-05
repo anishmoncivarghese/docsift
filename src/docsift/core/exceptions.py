@@ -16,3 +16,7 @@ class ConversionFailedError(DocSiftError):
 
 class ServiceUnavailableError(DocSiftError):
     """The service is shutting down and cannot accept new work."""
+
+
+class SearchQueryError(DocSiftError):
+    """A search query or retrieval control is invalid."""

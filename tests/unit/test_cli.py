@@ -5,9 +5,10 @@ from typer.testing import CliRunner
 
 from docsift import __version__
 from docsift.cli.main import app
-from docsift.core.models import EngineOutput
+from docsift.core.models import Chunk, EngineOutput
 from docsift.engines.base import ConversionEngine
 from docsift.engines.registry import register_engine, unregister_engine
+from docsift.storage import database
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
@@ -196,3 +197,105 @@ def test_compare_exits_one_when_all_engines_fail(tmp_path):
         unregister_engine("markitdown")
         unregister_engine("docling")
     assert result.exit_code == 1
+
+
+def _indexed_document(tmp_path, monkeypatch) -> str:
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "data"))
+    database.init_db()
+    document_id = "doc_abc123def456"
+    database.save_document(
+        document_id,
+        "report.pdf",
+        "application/pdf",
+        10,
+        "a" * 64,
+        "docling",
+        str(tmp_path / "result.json"),
+    )
+    database.index_document_chunks(
+        document_id,
+        [
+            Chunk(
+                chunk_id=f"{document_id}_c000",
+                text="Opening context that must only appear when requested.",
+                estimated_tokens=8,
+                section_path=["Overview"],
+                pages=[1],
+            ),
+            Chunk(
+                chunk_id=f"{document_id}_c001",
+                text="Operational risk controls are effective.",
+                estimated_tokens=7,
+                section_path=["Risk Management"],
+                pages=[2],
+            ),
+        ],
+    )
+    return document_id
+
+
+def test_search_help_lists_retrieval_controls():
+    result = runner.invoke(app, ["search", "--help"])
+
+    assert result.exit_code == 0
+    assert "--limit" in result.output
+    assert "--max-tokens" in result.output
+    assert "--context" in result.output
+
+
+def test_search_prints_selected_chunk_and_metadata(tmp_path, monkeypatch):
+    document_id = _indexed_document(tmp_path, monkeypatch)
+
+    result = runner.invoke(app, ["search", document_id, '"operational risk"'])
+
+    assert result.exit_code == 0, result.output
+    assert f"document_id: {document_id}" in result.output
+    assert 'query: "operational risk"' in result.output
+    assert "results: 1" in result.output
+    assert f"chunk_id: {document_id}_c001" in result.output
+    assert "section: Risk Management" in result.output
+    assert "pages: 2" in result.output
+    assert "Operational risk controls are effective." in result.output
+    assert "Opening context" not in result.output
+
+
+def test_search_context_prints_neighboring_chunk(tmp_path, monkeypatch):
+    document_id = _indexed_document(tmp_path, monkeypatch)
+
+    result = runner.invoke(
+        app,
+        ["search", document_id, '"operational risk"', "--context", "1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Opening context" in result.output
+    assert "context_for:" in result.output
+
+
+def test_search_unknown_document_exits_nonzero(tmp_path, monkeypatch):
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "data"))
+    database.init_db()
+
+    result = runner.invoke(app, ["search", "doc_000000000000", "risk"])
+
+    assert result.exit_code == 1
+    assert "document not found" in result.output
+
+
+def test_search_invalid_query_is_content_safe(tmp_path, monkeypatch):
+    document_id = _indexed_document(tmp_path, monkeypatch)
+
+    result = runner.invoke(app, ["search", document_id, '"private phrase'])
+
+    assert result.exit_code == 1
+    assert "invalid search query" in result.output
+    assert "private phrase" not in result.output
+
+
+def test_search_rejects_invalid_controls(tmp_path, monkeypatch):
+    document_id = _indexed_document(tmp_path, monkeypatch)
+
+    result = runner.invoke(app, ["search", document_id, "risk", "--limit", "0"])
+
+    assert result.exit_code == 1
+    assert "limit must be between 1 and 20" in result.output

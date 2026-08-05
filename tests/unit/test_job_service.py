@@ -74,6 +74,55 @@ def test_successful_job_stores_the_document(upload):
     assert database.get_document(document_id)["engine"] == "markitdown"
 
 
+def test_successful_job_indexes_its_chunks_for_search(upload):
+    register_engine("markitdown", OkEngine)
+    try:
+        job_id, document_id = job_service.submit(upload, "upload.txt")
+        assert _await_job(job_id) == "succeeded"
+    finally:
+        unregister_engine("markitdown")
+
+    rows = database.search_document_chunks(document_id, "body", limit=5)
+    assert [row["chunk_id"] for row in rows] == [f"{document_id}_c000"]
+
+
+def test_reprocessing_same_document_replaces_its_search_rows(tmp_path):
+    register_engine("markitdown", OkEngine)
+    try:
+        first = tmp_path / "first.txt"
+        first.write_text("same bytes", encoding="utf-8")
+        first_job, document_id = job_service.submit(first, "first.txt")
+        assert _await_job(first_job) == "succeeded"
+
+        second = tmp_path / "second.txt"
+        second.write_text("same bytes", encoding="utf-8")
+        second_job, second_document_id = job_service.submit(second, "second.txt")
+        assert _await_job(second_job) == "succeeded"
+    finally:
+        unregister_engine("markitdown")
+
+    assert second_document_id == document_id
+    rows = database.search_document_chunks(document_id, "body", limit=5)
+    assert [row["chunk_id"] for row in rows] == [f"{document_id}_c000"]
+
+
+def test_index_failure_fails_job_without_exposing_document_content(upload, monkeypatch):
+    def fail_index(*args, **kwargs):
+        raise RuntimeError("secret document content")
+
+    monkeypatch.setattr(database, "index_document_chunks", fail_index)
+    register_engine("markitdown", OkEngine)
+    try:
+        job_id, document_id = job_service.submit(upload, "upload.txt")
+        assert _await_job(job_id) == "failed"
+    finally:
+        unregister_engine("markitdown")
+
+    record = job_service.get(job_id)
+    assert record.error == "RuntimeError"
+    assert database.get_document(document_id) is None
+
+
 def test_failed_job_never_records_document_content(upload):
     register_engine("markitdown", BoomEngine)
     try:

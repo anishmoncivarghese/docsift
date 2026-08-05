@@ -154,6 +154,62 @@ def compare(
 
 
 @app.command()
+def search(
+    document_id: str = typer.Argument(..., help="Stored document id."),
+    query: str = typer.Argument(..., help="Keyword or quoted phrase."),
+    limit: int = typer.Option(5, help="Maximum number of direct matches."),
+    max_tokens: int = typer.Option(5000, help="Total token budget for returned chunks."),
+    context: int = typer.Option(0, help="Adjacent chunks to include on each side."),
+) -> None:
+    """Search a stored document and print only the selected chunks."""
+    from docsift.core.exceptions import DocSiftError
+    from docsift.services.search_service import search_document
+    from docsift.storage import database
+
+    try:
+        database.init_db()
+        if database.get_document(document_id) is None:
+            typer.secho("error: document not found", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1)
+        response = search_document(
+            document_id,
+            query,
+            limit=limit,
+            max_tokens=max_tokens,
+            context=context,
+        )
+    except typer.Exit:
+        raise
+    except DocSiftError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.secho(
+            f"error: unexpected failure: {type(exc).__name__}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"document_id: {response.document_id}")
+    typer.echo(f"query: {response.query}")
+    typer.echo(f"estimated_tokens: {response.estimated_tokens}")
+    typer.echo(f"results: {len(response.results)}")
+    for result in response.results:
+        typer.echo("---")
+        typer.echo(f"chunk_id: {result.chunk_id}")
+        typer.echo(f"match: {str(result.match).lower()}")
+        if result.context_for is not None:
+            typer.echo(f"context_for: {result.context_for}")
+        if result.score is not None:
+            typer.echo(f"score: {result.score:.6f}")
+        typer.echo(f"section: {' > '.join(result.section_path)}")
+        typer.echo(f"pages: {','.join(str(page) for page in result.pages)}")
+        typer.echo(f"estimated_tokens: {result.estimated_tokens}")
+        typer.echo(result.text)
+
+
+@app.command()
 def serve(
     host: str = typer.Option("127.0.0.1", help="Interface to bind."),
     port: int = typer.Option(8000, help="Port to listen on."),

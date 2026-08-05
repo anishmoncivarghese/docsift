@@ -39,3 +39,21 @@ class ErrorResponse(BaseModel):
 class ChunksResponse(BaseModel):
     document_id: str
     chunks: list[Chunk]
+
+
+class SearchResult(BaseModel):
+    chunk_id: str
+    text: str
+    estimated_tokens: int
+    section_path: list[str] = Field(default_factory=list)
+    pages: list[int] = Field(default_factory=list)
+    score: float | None = None
+    match: bool = True
+    context_for: str | None = None
+
+
+class SearchResponse(BaseModel):
+    document_id: str
+    query: str
+    estimated_tokens: int
+    results: list[SearchResult] = Field(default_factory=list)

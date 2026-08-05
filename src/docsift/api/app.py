@@ -15,8 +15,9 @@ import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from docsift import __version__
@@ -25,13 +26,14 @@ from docsift.api.schemas import (
     HealthResponse,
     JobAccepted,
     JobStatusResponse,
+    SearchResponse,
     VersionResponse,
 )
 from docsift.core.config import get_settings
-from docsift.core.exceptions import ServiceUnavailableError, UnsupportedFileError
+from docsift.core.exceptions import SearchQueryError, ServiceUnavailableError, UnsupportedFileError
 from docsift.core.models import ConversionResult
 from docsift.engines.router import SUPPORTED_SUFFIXES, valid_engine_choices
-from docsift.services import job_service
+from docsift.services import job_service, search_service
 from docsift.storage import cache, database, documents
 
 _CHUNK = 1 << 20
@@ -232,6 +234,38 @@ def create_app() -> FastAPI:
     def get_document_chunks(document_id: str) -> ChunksResponse:
         result = _load_or_404(document_id)
         return ChunksResponse(document_id=result.document_id, chunks=result.chunks)
+
+    @app.get(
+        "/v1/documents/{document_id}/search",
+        response_model=SearchResponse,
+        operation_id="searchDocument",
+        summary="Search a converted document",
+        description=(
+            "Return ranked, token-budgeted document chunks. The complete document "
+            "is never returned by this operation."
+        ),
+    )
+    def search_document_endpoint(
+        document_id: str,
+        q: Annotated[str, Query(min_length=1, description="Keyword or quoted phrase")],
+        limit: Annotated[int, Query(ge=1, le=20)] = 5,
+        max_tokens: Annotated[int, Query(ge=1, le=20_000)] = 5000,
+        context: Annotated[int, Query(ge=0, le=2)] = 0,
+    ) -> SearchResponse:
+        # Confirm the stored result exists rather than treating an empty index
+        # as proof of absence: documents with no chunks are valid and simply
+        # return no matches.
+        _load_or_404(document_id)
+        try:
+            return search_service.search_document(
+                document_id,
+                q,
+                limit=limit,
+                max_tokens=max_tokens,
+                context=context,
+            )
+        except SearchQueryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.delete(
         "/v1/documents/{document_id}",

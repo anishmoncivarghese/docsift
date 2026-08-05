@@ -117,6 +117,11 @@ def _run(
         result = result.model_copy(deep=True)
         result.source.filename = filename
         result_path = documents.store_result(result)
+        # Search is part of the completed-document contract from Milestone 5.
+        # Replace the index before publishing the document row or marking the
+        # job succeeded, so callers never observe a successful-but-unsearchable
+        # conversion. The index operation is atomic per document.
+        database.index_document_chunks(result.document_id, result.chunks)
         database.save_document(
             document_id=result.document_id,
             filename=result.source.filename,

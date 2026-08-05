@@ -116,6 +116,9 @@ def test_unknown_document_is_404(client):
     assert client.get("/v1/documents/doc_000000000000").status_code == 404
     assert client.get("/v1/documents/doc_000000000000/markdown").status_code == 404
     assert client.get("/v1/documents/doc_000000000000/chunks").status_code == 404
+    assert (
+        client.get("/v1/documents/doc_000000000000/search", params={"q": "body"}).status_code == 404
+    )
 
 
 @pytest.mark.parametrize("bad_id", ["not-a-doc-id", "doc_ABCDEF123456", "doc_short"])
@@ -123,7 +126,81 @@ def test_malformed_document_id_is_404_not_500(client, bad_id):
     assert client.get(f"/v1/documents/{bad_id}").status_code == 404
     assert client.get(f"/v1/documents/{bad_id}/markdown").status_code == 404
     assert client.get(f"/v1/documents/{bad_id}/chunks").status_code == 404
+    assert client.get(f"/v1/documents/{bad_id}/search", params={"q": "body"}).status_code == 404
     assert client.delete(f"/v1/documents/{bad_id}").status_code == 404
+
+
+def test_document_search_returns_ranked_chunk_metadata(client):
+    _, document_id = _upload_and_wait(client)
+
+    response = client.get(f"/v1/documents/{document_id}/search", params={"q": "body"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document_id"] == document_id
+    assert body["query"] == "body"
+    assert body["estimated_tokens"] > 0
+    assert len(body["results"]) == 1
+    result = body["results"][0]
+    assert result["chunk_id"].startswith(document_id)
+    assert result["match"] is True
+    assert result["context_for"] is None
+    assert isinstance(result["section_path"], list)
+    assert isinstance(result["pages"], list)
+    assert isinstance(result["score"], float)
+
+
+def test_document_search_supports_phrase_queries_and_no_matches(client):
+    _, document_id = _upload_and_wait(client)
+
+    phrase = client.get(
+        f"/v1/documents/{document_id}/search",
+        params={"q": '"body paragraph"'},
+    )
+    missing = client.get(
+        f"/v1/documents/{document_id}/search",
+        params={"q": "platypus"},
+    )
+
+    assert phrase.status_code == 200
+    assert len(phrase.json()["results"]) == 1
+    assert missing.status_code == 200
+    assert missing.json()["results"] == []
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"q": ""},
+        {"q": "   "},
+        {"q": '"unterminated'},
+        {"q": "body", "limit": 0},
+        {"q": "body", "limit": 21},
+        {"q": "body", "max_tokens": 0},
+        {"q": "body", "max_tokens": 20001},
+        {"q": "body", "context": -1},
+        {"q": "body", "context": 3},
+    ],
+)
+def test_document_search_rejects_invalid_controls_and_queries(client, params):
+    _, document_id = _upload_and_wait(client)
+
+    response = client.get(f"/v1/documents/{document_id}/search", params=params)
+
+    assert response.status_code == 422
+    assert "unterminated" not in response.text
+
+
+def test_search_endpoint_has_stable_openapi_contract(client):
+    operation = client.get("/openapi.json").json()["paths"]["/v1/documents/{document_id}/search"][
+        "get"
+    ]
+
+    assert operation["operationId"] == "searchDocument"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/SearchResponse"
+    }
 
 
 def test_reuploading_the_same_file_returns_the_same_document(client):

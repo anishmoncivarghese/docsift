@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Adds local keyword and phrase retrieval (Milestone 5).
+
+- Successful API conversions index normalized chunks in SQLite FTS5. Reprocessing
+  the same document replaces its index atomically, and deletion removes its search
+  rows together with the document record.
+- `GET /v1/documents/{id}/search` returns BM25-ranked chunks with page, section,
+  token, score, match, and context metadata. `limit`, `max_tokens`, and `context`
+  bound the response so the endpoint never falls back to returning full Markdown.
+- `docsift search DOCUMENT_ID QUERY` exposes the same retrieval path locally,
+  including quoted phrases and context controls.
+- Invalid search syntax returns a stable, content-safe error instead of exposing
+  SQLite details or echoing the query.
+- Search remains fully local and dependency-free beyond SQLite. It is lexical
+  rather than semantic; hybrid retrieval remains planned for v0.3 only if
+  benchmarks justify it.
+
 ## 0.2.0 — 2026-08-05
 
 Adds an HTTP API.
@@ -39,7 +57,7 @@ Adds an HTTP API.
   image, declares `/data` as a volume, and adds a `HEALTHCHECK`.
 - OpenAPI at `/openapi.json`, with stable operation ids for connector imports.
 
-Search (`/v1/documents/{id}/search`) and `POST /v1/compare` are not implemented yet.
+`POST /v1/compare` is not implemented yet.
 
 ## 0.1.1 — 2026-08-03
 
