@@ -6,7 +6,7 @@ DocSift converts PDFs and Office documents into clean, structured, AI-ready
 Markdown and JSON — locally, with no cloud APIs. Docling handles PDFs;
 MarkItDown handles the breadth formats; both sit behind one interface.
 
-**v0.1.1**
+**v0.2.0**
 
 ## Install
 
@@ -53,6 +53,38 @@ references) and splits it into token-budgeted chunks with heading context:
 Results are cached in `~/.cache/docsift` (override with `DOCSIFT_CACHE_DIR`);
 an unchanged file with unchanged settings returns instantly.
 
+## HTTP API
+
+    pip install "docsift[api]"
+    docsift serve
+
+Then convert a document asynchronously:
+
+    # returns 202 with {"job_id": "...", "document_id": "...", "status": "queued"}
+    curl -sS -F file=@report.pdf http://127.0.0.1:8000/v1/documents
+
+    # poll until "succeeded" or "failed"
+    curl -sS http://127.0.0.1:8000/v1/jobs/job_xxxxxxxxxxxxxxxx
+
+    # then fetch the result
+    curl -sS http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/markdown
+    curl -sS http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/chunks
+
+Conversion always runs in the background — a long PDF can take minutes, and
+clients that assume a synchronous response will time out. The OpenAPI document
+is at `/openapi.json`.
+
+State lives in `DOCSIFT_DATA_DIR` (default `~/.local/share/docsift`): a SQLite
+database of jobs and documents, plus stored artifacts. Uploads are capped at
+50 MB via `DOCSIFT_MAX_UPLOAD_BYTES`. `DELETE /v1/documents/{id}` removes the
+stored document and its database record, and also purges any cached
+conversion results for it, so deletion is genuine rather than leaving a copy
+recoverable from the cache.
+
+**Running untrusted documents:** the service converts whatever it is given.
+Run it on infrastructure you control, behind your own authentication — DocSift
+has none of its own — and prefer the container, which runs as a non-root user.
+
 ## Known limitations
 
 - `--overlap` applies to the fallback Markdown chunker only. Docling supplies
@@ -72,6 +104,9 @@ an unchanged file with unchanged settings returns instantly.
   is still fully buffered by the framework's multipart parser before the
   size check runs -- the check is still correct, just no longer early, for
   that case.
+- The API has no authentication, rate limiting or multi-tenancy. Do not expose
+  it directly to the internet.
+- Search and comparison endpoints are not implemented yet.
 
 ## License
 

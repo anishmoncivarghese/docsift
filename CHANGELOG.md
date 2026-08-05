@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.0 — 2026-08-05
+
+Adds an HTTP API.
+
+- `docsift serve` runs a FastAPI service (install with `pip install "docsift[api]"`).
+- `POST /v1/documents` accepts an upload and returns `202` with a job id and a
+  document id immediately; conversion runs in the background. Clients poll
+  `GET /v1/jobs/{job_id}` until the status is `succeeded` or `failed`. The API is
+  asynchronous by design: Docling on a long PDF routinely exceeds the ~120-second
+  timeout that Power Platform custom connectors enforce.
+- `GET /v1/documents/{id}`, `/markdown` and `/chunks` retrieve the result;
+  `DELETE /v1/documents/{id}` removes it and its stored files.
+- Job and document metadata live in SQLite under `DOCSIFT_DATA_DIR`
+  (default `~/.local/share/docsift`), separate from the disposable conversion
+  cache in `DOCSIFT_CACHE_DIR`.
+- Jobs left `queued` or `processing` by a stopped process are reported as
+  `failed` with error `interrupted` on the next startup rather than hanging.
+- Uploads are capped at 50 MB (`DOCSIFT_MAX_UPLOAD_BYTES`), unsupported types are
+  rejected with `415`, and the client's filename is never used as a path.
+- A `Dockerfile` runs the service as a non-root user.
+- OpenAPI at `/openapi.json`, with stable operation ids for connector imports.
+
+Search (`/v1/documents/{id}/search`) and `POST /v1/compare` are not implemented yet.
+
 ## 0.1.1 — 2026-08-03
 
 Closes the limitations documented in 0.1.0.

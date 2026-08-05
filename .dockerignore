@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+.superpowers
+.code-review-graph
+benchmarks/corpus
+dist
+docs
+tests
+output
+__pycache__
+*.pyc
