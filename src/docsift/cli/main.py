@@ -153,6 +153,26 @@ def compare(
         raise typer.Exit(code=1)
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Interface to bind."),
+    port: int = typer.Option(8000, help="Port to listen on."),
+    reload: bool = typer.Option(False, "--reload", help="Reload on code changes."),
+) -> None:
+    """Run the DocSift HTTP API."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        typer.secho(
+            "error: the API extra is not installed; install it with: pip install 'docsift[api]'",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    uvicorn.run("docsift.api.app:app", host=host, port=port, reload=reload)
+
+
 cache_app = typer.Typer(help="Inspect and clear the conversion cache.", no_args_is_help=True)
 app.add_typer(cache_app, name="cache")
 
