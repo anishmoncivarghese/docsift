@@ -16,15 +16,23 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from docsift import __version__
-from docsift.api.schemas import HealthResponse, JobAccepted, VersionResponse
+from docsift.api.schemas import (
+    ChunksResponse,
+    HealthResponse,
+    JobAccepted,
+    JobStatusResponse,
+    VersionResponse,
+)
 from docsift.core.config import get_settings
-from docsift.core.exceptions import ServiceUnavailableError
+from docsift.core.exceptions import ServiceUnavailableError, UnsupportedFileError
+from docsift.core.models import ConversionResult
 from docsift.engines.router import SUPPORTED_SUFFIXES
 from docsift.services import job_service
+from docsift.storage import database, documents
 
 _CHUNK = 1 << 20
 
@@ -155,6 +163,73 @@ def create_app() -> FastAPI:
             target.unlink(missing_ok=True)
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return JobAccepted(job_id=job_id, document_id=document_id, status="queued")
+
+    def _load_or_404(document_id: str) -> ConversionResult:
+        try:
+            result = documents.load_result(document_id)
+        except UnsupportedFileError:
+            # A malformed id names a resource that cannot exist.
+            raise HTTPException(status_code=404, detail="document not found") from None
+        if result is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        return result
+
+    @app.get(
+        "/v1/jobs/{job_id}",
+        response_model=JobStatusResponse,
+        operation_id="getJobStatus",
+    )
+    def get_job(job_id: str) -> JobStatusResponse:
+        record = job_service.get(job_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="job not found")
+        return JobStatusResponse(
+            job_id=record.job_id,
+            status=record.status,
+            document_id=record.document_id,
+            error=record.error,
+        )
+
+    @app.get(
+        "/v1/documents/{document_id}",
+        response_model=ConversionResult,
+        operation_id="getDocument",
+    )
+    def get_document(document_id: str) -> ConversionResult:
+        return _load_or_404(document_id)
+
+    @app.get(
+        "/v1/documents/{document_id}/markdown",
+        response_class=Response,
+        operation_id="getDocumentMarkdown",
+    )
+    def get_document_markdown(document_id: str) -> Response:
+        result = _load_or_404(document_id)
+        return Response(content=result.document.markdown, media_type="text/markdown; charset=utf-8")
+
+    @app.get(
+        "/v1/documents/{document_id}/chunks",
+        response_model=ChunksResponse,
+        operation_id="getDocumentChunks",
+    )
+    def get_document_chunks(document_id: str) -> ChunksResponse:
+        result = _load_or_404(document_id)
+        return ChunksResponse(document_id=result.document_id, chunks=result.chunks)
+
+    @app.delete(
+        "/v1/documents/{document_id}",
+        status_code=204,
+        operation_id="deleteDocument",
+    )
+    def delete_document(document_id: str) -> Response:
+        try:
+            removed_files = documents.delete_document_files(document_id)
+        except UnsupportedFileError:
+            raise HTTPException(status_code=404, detail="document not found") from None
+        removed_row = database.delete_document(document_id)
+        if not (removed_files or removed_row):
+            raise HTTPException(status_code=404, detail="document not found")
+        return Response(status_code=204)
 
     return app
 
