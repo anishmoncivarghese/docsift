@@ -64,12 +64,21 @@ def _document_id_for(path: Path) -> str:
     return f"doc_{digest.hexdigest()[:12]}"
 
 
-def _run(job_id: str, source_path: Path, engine: str, options: ConversionOptions) -> None:
+def _run(
+    job_id: str, source_path: Path, filename: str, engine: str, options: ConversionOptions
+) -> None:
     from docsift.services.conversion_service import convert_document
 
     database.set_job_status(job_id, "processing")
     try:
         result = convert_document(source_path, engine=engine, options=options)
+        # convert_document derives source.filename from source_path.name -- the
+        # temp file's name, since it never sees the client's original filename.
+        # Restore the caller-supplied name here; it's metadata only (artifacts
+        # are stored and looked up by document_id, never by this string), so
+        # there's no path risk in using it as-is.
+        result = result.model_copy(deep=True)
+        result.source.filename = filename
         result_path = documents.store_result(result)
         database.save_document(
             document_id=result.document_id,
@@ -127,7 +136,7 @@ def submit(
         if _shutting_down:
             raise ServiceUnavailableError("service is shutting down")
         database.create_job(job_id, document_id)
-        future = _pool().submit(_run, job_id, source_path, engine, options)
+        future = _pool().submit(_run, job_id, source_path, filename, engine, options)
     future.add_done_callback(_worker_finished(job_id))
     return job_id, document_id
 

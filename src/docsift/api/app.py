@@ -1,9 +1,23 @@
+"""DocSift's FastAPI app: health, version, and the upload endpoint.
+
+Known gap in the upload size guard: `BodySizeLimitMiddleware` below rejects an
+oversized body before it is buffered, but only when the client sends an honest
+`Content-Length` header. A request with no `Content-Length` (chunked
+transfer-encoding) or an understated one is still fully buffered by
+Starlette's multipart parser before the in-handler streaming check gets a
+chance to reject it -- that check is a correctness backstop for a dishonest
+or missing header, not a performance guarantee. See README's Known
+limitations for the user-facing note.
+"""
+
+import json
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from docsift import __version__
 from docsift.api.schemas import HealthResponse, JobAccepted, VersionResponse
@@ -13,6 +27,55 @@ from docsift.engines.router import SUPPORTED_SUFFIXES
 from docsift.services import job_service
 
 _CHUNK = 1 << 20
+
+
+class BodySizeLimitMiddleware:
+    """Reject an oversized body before FastAPI's form parser buffers it.
+
+    FastAPI resolves `UploadFile = File(...)` by calling `request.form()`, which
+    drains and spools the entire body before the route function runs -- so a check
+    inside the handler cannot stop the server paying for the whole upload. This
+    sits in front of that and answers 413 without reading the body.
+
+    This only catches a client that reports its size honestly via
+    `Content-Length`. A chunked request (no `Content-Length`) or one that
+    understates its size passes through to the handler's own streaming check,
+    which is correct but -- because FastAPI has already buffered the body by
+    the time that check runs -- no longer early-aborting.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        max_bytes = get_settings().max_upload_bytes
+        declared = dict(scope.get("headers") or {}).get(b"content-length")
+        if declared is not None:
+            try:
+                too_big = int(declared) > max_bytes
+            except ValueError:
+                too_big = False
+            if too_big:
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 413,
+                        "headers": [(b"content-type", b"application/json")],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": json.dumps(
+                            {"detail": f"upload exceeds {max_bytes} bytes"}
+                        ).encode(),
+                    }
+                )
+                return
+        await self.app(scope, receive, send)
 
 
 @asynccontextmanager
@@ -29,6 +92,7 @@ def create_app() -> FastAPI:
         summary="Convert documents once. Give agents only what they need.",
         lifespan=lifespan,
     )
+    app.add_middleware(BodySizeLimitMiddleware)
 
     @app.get("/health", response_model=HealthResponse, operation_id="getHealth")
     def health() -> HealthResponse:
@@ -81,8 +145,11 @@ def create_app() -> FastAPI:
             raise
 
         try:
-            job_id, document_id = job_service.submit(
-                target, file.filename or target.name, engine=engine
+            # job_service.submit hashes the whole file and writes to sqlite --
+            # both blocking I/O -- so it runs off the event loop to avoid
+            # serializing concurrent uploads behind it.
+            job_id, document_id = await run_in_threadpool(
+                job_service.submit, target, file.filename or target.name, engine
             )
         except ServiceUnavailableError as exc:
             target.unlink(missing_ok=True)

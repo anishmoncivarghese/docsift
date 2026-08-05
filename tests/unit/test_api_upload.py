@@ -93,6 +93,67 @@ def test_oversized_upload_is_rejected(client, engine, monkeypatch):
     assert response.status_code == 413
 
 
+def test_oversized_upload_with_honest_content_length_never_touches_disk(
+    client, engine, monkeypatch, tmp_path
+):
+    """The BodySizeLimitMiddleware must reject before the handler runs at all --
+    proven here by asserting the uploads directory is never even created, not
+    just that no file is left behind afterwards."""
+    monkeypatch.setenv("DOCSIFT_MAX_UPLOAD_BYTES", "10")
+    response = client.post(
+        "/v1/documents", files={"file": ("note.txt", b"x" * (1 << 20), "text/plain")}
+    )
+    assert response.status_code == 413
+    assert not (tmp_path / "data" / "uploads").exists()
+
+
+def test_oversized_upload_without_content_length_is_still_rejected(client, engine, monkeypatch):
+    """A chunked request (no Content-Length) skips the middleware's fast path,
+    so it must still be caught -- correctly, if not early -- by the in-handler
+    streaming check once FastAPI has finished buffering it."""
+    monkeypatch.setenv("DOCSIFT_MAX_UPLOAD_BYTES", "10")
+
+    def body():
+        boundary = b"----docsifttest"
+        yield b"--" + boundary + b"\r\n"
+        yield b'Content-Disposition: form-data; name="file"; filename="note.txt"\r\n'
+        yield b"Content-Type: text/plain\r\n\r\n"
+        yield b"x" * 100
+        yield b"\r\n--" + boundary + b"--\r\n"
+
+    response = client.post(
+        "/v1/documents",
+        content=body(),
+        headers={"content-type": "multipart/form-data; boundary=----docsifttest"},
+    )
+    assert response.request.headers.get("content-length") is None
+    assert response.status_code == 413
+
+
+def test_upload_preserves_the_clients_original_filename(client, engine):
+    """job_service.submit's filename argument must end up as the stored
+    document's filename, not the server-side temp file's generated name."""
+    from docsift.services import job_service
+    from docsift.storage import documents
+
+    response = client.post("/v1/documents", files={"file": ("report.txt", b"hello", "text/plain")})
+    assert response.status_code == 202
+    document_id = response.json()["document_id"]
+
+    import time
+
+    deadline = time.time() + 5.0
+    record = None
+    while time.time() < deadline:
+        record = job_service.get(response.json()["job_id"])
+        if record and record.status in ("succeeded", "failed"):
+            break
+        time.sleep(0.02)
+    assert record is not None and record.status == "succeeded"
+    result = documents.load_result(document_id)
+    assert result.source.filename == "report.txt"
+
+
 def test_client_filename_cannot_escape_the_data_directory(client, engine, tmp_path):
     response = client.post(
         "/v1/documents",

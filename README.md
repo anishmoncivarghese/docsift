@@ -66,6 +66,12 @@ an unchanged file with unchanged settings returns instantly.
   its rows are not protected from de-duplication. This affects hand-written
   Markdown, and table text inside Docling-supplied chunks, which is
   serialized as triplets rather than pipes.
+- The `POST /v1/documents` API endpoint rejects an oversized upload before
+  buffering it only when the client sends an honest `Content-Length` header.
+  A chunked request (no `Content-Length`) or one that understates its size
+  is still fully buffered by the framework's multipart parser before the
+  size check runs -- the check is still correct, just no longer early, for
+  that case.
 
 ## License
 
