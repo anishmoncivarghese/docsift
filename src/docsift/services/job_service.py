@@ -14,6 +14,7 @@ from docsift.storage import cache, database, documents
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
 _shutting_down = False
+_pending_jobs = 0  # queued + processing; guarded by _executor_lock
 
 
 def _pool() -> ThreadPoolExecutor:
@@ -28,11 +29,12 @@ def _pool() -> ThreadPoolExecutor:
 
 def reset_for_tests() -> None:
     """Drop the executor so the next submit builds one from current settings."""
-    global _executor, _shutting_down
+    global _executor, _shutting_down, _pending_jobs
     with _executor_lock:
         executor = _executor
         _executor = None
         _shutting_down = False
+        _pending_jobs = 0
     if executor is not None:
         executor.shutdown(wait=True)
 
@@ -51,9 +53,12 @@ def shutdown() -> None:
         _executor = None
     # Wait for in-flight work outside the lock -- holding it here would block
     # every other caller of submit()/shutdown()/reset_for_tests() until the
-    # in-flight jobs drain.
+    # in-flight jobs drain. cancel_futures=True drops anything still queued
+    # (not yet started) instead of running it first, so a container's stop
+    # grace period isn't spent draining an unbounded backlog before SIGKILL
+    # turns it into orphaned uploads anyway.
     if executor is not None:
-        executor.shutdown(wait=True)
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def _document_id_for(path: Path) -> str:
@@ -115,6 +120,15 @@ def _worker_finished(job_id: str):
     """
 
     def callback(future) -> None:
+        global _pending_jobs
+        with _executor_lock:
+            _pending_jobs -= 1
+        if future.cancelled():
+            # shutdown()'s cancel_futures=True cancelled this before it ever
+            # ran; the job row stays "queued" and fail_stale_jobs() will
+            # reconcile it as "interrupted" on the next startup, same as any
+            # other job abandoned by a stopped process.
+            return
         exc = future.exception()
         if exc is None:
             return
@@ -139,9 +153,17 @@ def submit(
     source_path = Path(source_path)
     document_id = _document_id_for(source_path)
     job_id = f"job_{uuid4().hex[:16]}"
+    global _pending_jobs
     with _executor_lock:
         if _shutting_down:
             raise ServiceUnavailableError("service is shutting down")
+        if _pending_jobs >= get_settings().max_pending_jobs:
+            # Each queued job pins its uploaded original on disk until a
+            # worker picks it up, so an unbounded backlog is unbounded disk
+            # use too. Reject rather than accept work no worker may reach for
+            # a long time.
+            raise ServiceUnavailableError("job backlog is full; try again later")
+        _pending_jobs += 1
         database.create_job(job_id, document_id)
         future = _pool().submit(_run, job_id, source_path, filename, engine, options)
     future.add_done_callback(_worker_finished(job_id))

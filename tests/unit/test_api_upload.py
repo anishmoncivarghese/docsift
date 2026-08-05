@@ -213,6 +213,38 @@ def test_valid_explicit_engine_still_works(client, engine):
     assert response.status_code == 202
 
 
+def test_pending_job_backlog_over_the_ceiling_returns_503(client, monkeypatch):
+    import threading
+
+    monkeypatch.setenv("DOCSIFT_MAX_PENDING_JOBS", "1")
+    release = threading.Event()
+
+    class GatedEngine(ConversionEngine):
+        name = "markitdown"
+
+        @classmethod
+        def is_available(cls) -> bool:
+            return True
+
+        @classmethod
+        def version(cls) -> str:
+            return "9.9.9"
+
+        def convert(self, path, options=None) -> EngineOutput:
+            release.wait(timeout=30)
+            return EngineOutput(markdown="# Gated\n\nBody.\n", engine_version="9.9.9")
+
+    register_engine("markitdown", GatedEngine)
+    try:
+        first = client.post("/v1/documents", files={"file": ("a.txt", b"first", "text/plain")})
+        assert first.status_code == 202
+        second = client.post("/v1/documents", files={"file": ("b.txt", b"second", "text/plain")})
+        assert second.status_code == 503
+    finally:
+        release.set()
+        unregister_engine("markitdown")
+
+
 def test_importing_the_app_pulls_no_engine_modules():
     import subprocess
     import sys
