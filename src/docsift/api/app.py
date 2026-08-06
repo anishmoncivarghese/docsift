@@ -12,6 +12,7 @@ limitations for the user-facing note.
 
 import json
 import os
+import secrets
 import sqlite3
 import tempfile
 from collections.abc import AsyncIterator
@@ -19,9 +20,21 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -114,6 +127,20 @@ def _public_url() -> str:
     return os.environ.get("DOCSIFT_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
+def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Enforce the shared secret when one is configured.
+
+    Off unless `DOCSIFT_API_KEY` is set, so an existing deployment keeps working
+    unchanged. `compare_digest` keeps a wrong key from being discovered by timing.
+    The submitted value is never echoed back.
+    """
+    configured = get_settings().api_key
+    if configured is None:
+        return
+    if x_api_key is None or not secrets.compare_digest(x_api_key, configured):
+        raise HTTPException(status_code=401, detail="invalid or missing API key")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="DocSift",
@@ -182,6 +209,7 @@ def create_app() -> FastAPI:
             "minutes, so poll the job with getJobStatus until its status is succeeded, "
             "then retrieve the result. Do not assume the document is ready when this returns."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     async def upload_document(
         file: UploadFile = File(...),
@@ -269,6 +297,7 @@ def create_app() -> FastAPI:
             "document id is present even when the job fails, so always check the status "
             "before retrieving the document."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     def get_job(job_id: str) -> JobStatusResponse:
         record = job_service.get(job_id)
@@ -291,6 +320,7 @@ def create_app() -> FastAPI:
             "every chunk, and conversion metrics. Prefer searchDocument when you only need "
             "the parts relevant to a question, because this returns the whole document."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     def get_document(document_id: str) -> ConversionResult:
         return _load_or_404(document_id)
@@ -304,6 +334,7 @@ def create_app() -> FastAPI:
             "Return the cleaned Markdown for a converted document as plain text. This is "
             "the whole document; prefer searchDocument when you only need relevant sections."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     def get_document_markdown(document_id: str) -> Response:
         result = _load_or_404(document_id)
@@ -319,6 +350,7 @@ def create_app() -> FastAPI:
             "and token count. This is the whole document; prefer searchDocument when you "
             "only need relevant sections."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     def get_document_chunks(document_id: str) -> ChunksResponse:
         result = _load_or_404(document_id)
@@ -335,6 +367,7 @@ def create_app() -> FastAPI:
             "whole document when answering a question about it. Supports quoted phrases and "
             "optional adjacent-chunk context."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     def search_document_endpoint(
         document_id: str,
@@ -398,6 +431,7 @@ def create_app() -> FastAPI:
             "Permanently remove a document, its stored files, its search index and any cached "
             "copies. Cancels conversion if it is still running. This cannot be undone."
         ),
+        dependencies=[Depends(_require_api_key)],
     )
     def delete_document(document_id: str) -> Response:
         # Flag any still-running job for this document before touching the
@@ -425,6 +459,28 @@ def create_app() -> FastAPI:
         if not (removed_files or removed_row or removed_cache):
             raise HTTPException(status_code=404, detail="document not found")
         return Response(status_code=204)
+
+    if get_settings().api_key is not None:
+
+        def custom_openapi() -> dict:
+            if app.openapi_schema:
+                return app.openapi_schema
+            schema = get_openapi(
+                title=app.title,
+                version=app.version,
+                summary=app.summary,
+                description=app.description,
+                routes=app.routes,
+                servers=app.servers,
+            )
+            schema.setdefault("components", {})["securitySchemes"] = {
+                "ApiKeyHeader": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+            }
+            schema["security"] = [{"ApiKeyHeader": []}]
+            app.openapi_schema = schema
+            return schema
+
+        app.openapi = custom_openapi
 
     return app
 

@@ -18,6 +18,7 @@ class Settings(BaseModel):
     max_upload_bytes: int = Field(default=DEFAULT_MAX_UPLOAD_BYTES, ge=1)
     job_workers: int = Field(default=2, ge=1)
     max_pending_jobs: int = Field(default=32, ge=1)
+    api_key: str | None = None
 
 
 def _positive_int_env(name: str, default: int) -> int:
@@ -49,4 +50,5 @@ def get_settings() -> Settings:
         max_upload_bytes=_positive_int_env("DOCSIFT_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES),
         job_workers=_positive_int_env("DOCSIFT_JOB_WORKERS", 2),
         max_pending_jobs=_positive_int_env("DOCSIFT_MAX_PENDING_JOBS", 32),
+        api_key=os.environ.get("DOCSIFT_API_KEY") or None,
     )
