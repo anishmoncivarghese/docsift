@@ -50,5 +50,9 @@ def get_settings() -> Settings:
         max_upload_bytes=_positive_int_env("DOCSIFT_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES),
         job_workers=_positive_int_env("DOCSIFT_JOB_WORKERS", 2),
         max_pending_jobs=_positive_int_env("DOCSIFT_MAX_PENDING_JOBS", 32),
-        api_key=os.environ.get("DOCSIFT_API_KEY") or None,
+        # HTTP strips whitespace from header values, so a trailing space in
+        # the env var would otherwise lock the service out with no
+        # diagnostic: the configured key could never match any header a
+        # client actually sends.
+        api_key=(os.environ.get("DOCSIFT_API_KEY") or "").strip() or None,
     )

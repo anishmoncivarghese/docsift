@@ -154,6 +154,18 @@ def test_an_unknown_route_outside_v1_still_requires_the_key(monkeypatch):
         assert client.get("/admin/whatever").status_code == 401
 
 
+def test_a_duplicated_api_key_header_is_rejected_outright(engine, monkeypatch):
+    """dict(scope["headers"]) keeps only the last duplicate -- reject instead of picking one."""
+    monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
+    with _client() as client:
+        response = client.post(
+            "/v1/documents",
+            files={"file": ("note.txt", b"hello", "text/plain")},
+            headers=[("X-API-Key", "wrong"), ("X-API-Key", "s3cret")],
+        )
+    assert response.status_code == 401
+
+
 def test_security_scheme_appears_only_when_a_key_is_configured(monkeypatch):
     with _client() as client:
         document = client.get("/openapi.json").json()

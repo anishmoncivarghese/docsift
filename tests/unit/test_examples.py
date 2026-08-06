@@ -171,7 +171,15 @@ def test_power_automate_example_uses_a_do_until_loop():
     assert "getjobstatus" in text.replace(" ", "")
 
 
-def test_examples_are_included_in_the_wheel():
+def test_examples_are_included_in_the_sdist_but_not_the_wheel():
+    # examples/ is worked-example documentation (n8n workflow, connector
+    # setup guides), not importable package code. Force-including it into
+    # the wheel put it inside site-packages/docsift/examples -- shipped to
+    # every install even though nothing in the package imports it. Keep it
+    # in the sdist (so it's still in a source checkout / PyPI sdist download)
+    # but not the wheel.
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
-    assert force_include["examples"] == "docsift/examples"
+    wheel_target = project["tool"]["hatch"]["build"]["targets"]["wheel"]
+    assert "force-include" not in wheel_target
+    sdist_include = project["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    assert "examples" in sdist_include

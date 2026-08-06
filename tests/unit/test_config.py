@@ -67,3 +67,18 @@ def test_get_settings_does_not_create_the_directory(monkeypatch, tmp_path):
     monkeypatch.setenv("DOCSIFT_DATA_DIR", str(target))
     get_settings()
     assert not target.exists()
+
+
+def test_api_key_whitespace_is_stripped(monkeypatch):
+    """HTTP strips whitespace from header values, so a trailing space in
+    DOCSIFT_API_KEY would otherwise lock the service out with no diagnostic:
+    the configured key could never match any header a client actually sends."""
+    monkeypatch.setenv("DOCSIFT_API_KEY", "secret ")
+    settings = get_settings()
+    assert settings.api_key == "secret"
+
+
+def test_api_key_of_only_whitespace_is_treated_as_unset(monkeypatch):
+    monkeypatch.setenv("DOCSIFT_API_KEY", "   ")
+    settings = get_settings()
+    assert settings.api_key is None

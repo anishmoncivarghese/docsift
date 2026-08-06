@@ -8,9 +8,10 @@ Makes DocSift usable from Copilot Studio, Power Automate and n8n.
   Power Platform custom connectors do not accept the OpenAPI 3.1 document the
   service serves at `/openapi.json`, so this is what you import.
 - New optional API key. Set `DOCSIFT_API_KEY` and every `/v1/*` route requires an
-  `X-API-Key` header; `/health`, `/version` and `/openapi.json` stay open.
-  **Off by default** — an existing deployment that sets nothing behaves exactly
-  as before. This is a single shared secret, not per-user identity.
+  `X-API-Key` header; `/health`, `/version`, `/openapi.json`, `/docs` and
+  `/redoc` stay open. **Off by default** — an existing deployment that sets
+  nothing behaves exactly as before. This is a single shared secret, not
+  per-user identity.
 - Every API operation now carries a summary and a description written for agent
   tool selection, including when to prefer search over retrieving a whole
   document.

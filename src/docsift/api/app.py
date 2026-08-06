@@ -143,9 +143,16 @@ class ApiKeyMiddleware:
             return
 
         configured = get_settings().api_key
-        submitted = dict(scope.get("headers") or {}).get(b"x-api-key")
+        # dict(scope["headers"]) keeps only the last of any duplicate header,
+        # silently picking one candidate key over another. Reject outright
+        # when the client sends more than one X-API-Key rather than guessing
+        # which value it meant.
+        submitted_values = [
+            value for key, value in scope.get("headers") or [] if key == b"x-api-key"
+        ]
         accepted = configured is None or (
-            submitted is not None and secrets.compare_digest(submitted, configured.encode("utf-8"))
+            len(submitted_values) == 1
+            and secrets.compare_digest(submitted_values[0], configured.encode("utf-8"))
         )
         if accepted:
             await self.app(scope, receive, send)

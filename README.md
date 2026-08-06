@@ -150,8 +150,9 @@ Set `DOCSIFT_API_KEY` and every `/v1/*` route requires an `X-API-Key` header:
     DOCSIFT_API_KEY=your-shared-secret docsift serve
     curl -H "X-API-Key: your-shared-secret" http://127.0.0.1:8000/v1/documents/...
 
-`/health`, `/version` and `/openapi.json` stay open so container health checks
-and connector imports keep working. This is one shared secret for the whole
+`/health`, `/version`, `/openapi.json`, `/docs` and `/redoc` stay open so
+container health checks, connector imports and the interactive API docs keep
+working. This is one shared secret for the whole
 service — not per-user identity, and no substitute for network controls. If you
 set nothing, the service behaves exactly as it did before.
 
