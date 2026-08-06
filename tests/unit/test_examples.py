@@ -1,0 +1,65 @@
+import json
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("fastapi")
+
+EXAMPLES = Path(__file__).parent.parent.parent / "examples"
+
+
+@pytest.fixture(autouse=True)
+def isolated(tmp_path, monkeypatch):
+    monkeypatch.setenv("DOCSIFT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DOCSIFT_CACHE_DIR", str(tmp_path / "cache"))
+
+
+def _routes() -> set[tuple[str, str]]:
+    from docsift.api.app import create_app
+
+    document = create_app().openapi()
+    return {
+        (method.upper(), path)
+        for path, operations in document["paths"].items()
+        for method in operations
+    }
+
+
+def test_n8n_workflow_is_valid_json_and_importable():
+    workflow = json.loads(
+        (EXAMPLES / "n8n" / "docsift-convert-and-search.json").read_text(encoding="utf-8")
+    )
+    assert workflow["name"]
+    assert isinstance(workflow["nodes"], list)
+    assert len(workflow["nodes"]) >= 4
+    assert "connections" in workflow
+
+
+def test_n8n_workflow_calls_only_real_endpoints():
+    workflow = json.loads(
+        (EXAMPLES / "n8n" / "docsift-convert-and-search.json").read_text(encoding="utf-8")
+    )
+    routes = _routes()
+    template_paths = {
+        path.replace("{document_id}", "").replace("{job_id}", "") for _, path in routes
+    }
+    called = [
+        node["parameters"]["url"]
+        for node in workflow["nodes"]
+        if node.get("type") == "n8n-nodes-base.httpRequest"
+    ]
+    assert called, "workflow must make HTTP calls"
+    for url in called:
+        tail = url.split("}}", 1)[-1]
+        assert any(
+            tail.startswith(prefix) or prefix.rstrip("/") in tail for prefix in template_paths
+        ), f"workflow calls an endpoint that does not exist: {tail}"
+
+
+def test_n8n_workflow_polls_before_searching():
+    workflow = json.loads(
+        (EXAMPLES / "n8n" / "docsift-convert-and-search.json").read_text(encoding="utf-8")
+    )
+    names = [node["name"] for node in workflow["nodes"]]
+    assert any("poll" in name.lower() or "job" in name.lower() for name in names)
+    assert any("search" in name.lower() for name in names)
