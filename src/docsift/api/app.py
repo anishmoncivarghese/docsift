@@ -374,6 +374,7 @@ def create_app() -> FastAPI:
             "Return the cleaned Markdown for a converted document as plain text. This is "
             "the whole document; prefer searchDocument when you only need relevant sections."
         ),
+        responses={200: {"content": {"text/markdown": {}}}},
     )
     def get_document_markdown(document_id: str) -> Response:
         result = _load_or_404(document_id)

@@ -143,9 +143,17 @@ def _convert_responses(operation: dict) -> tuple[dict, list[str]]:
     for status, response in operation.get("responses", {}).items():
         converted: dict[str, Any] = {"description": response.get("description", "")}
         content = response.get("content", {})
-        for media, media_object in content.items():
-            if media not in produces:
-                produces.append(media)
+        # `produces` describes what a successful call returns. Pulling media
+        # types from error responses too would mislabel an endpoint whose
+        # success body isn't JSON -- e.g. getDocumentMarkdown's 200 has no
+        # `content` (it uses response_class=Response) while its 422 does, so
+        # aggregating across all statuses would advertise application/json
+        # for an endpoint that returns text/markdown.
+        if str(status).startswith("2"):
+            for media in content:
+                if media not in produces:
+                    produces.append(media)
+        for media_object in content.values():
             if "schema" in media_object:
                 converted["schema"] = _convert_refs(_flatten_nullable(media_object["schema"]))
             break

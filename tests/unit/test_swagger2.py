@@ -54,6 +54,12 @@ def test_upload_becomes_a_multipart_form_operation():
     assert parameters["engine"]["in"] == "formData"
 
 
+def test_markdown_endpoint_advertises_text_markdown_not_the_error_content_type():
+    swagger = to_swagger2(_document())
+    markdown = swagger["paths"]["/v1/documents/{document_id}/markdown"]["get"]
+    assert markdown["produces"] == ["text/markdown"]
+
+
 def test_search_query_parameters_are_preserved_with_their_bounds():
     swagger = to_swagger2(_document())
     search = swagger["paths"]["/v1/documents/{document_id}/search"]["get"]
