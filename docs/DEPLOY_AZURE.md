@@ -26,7 +26,12 @@ be globally unique and lowercase.
     az group create -n $RG -l $LOC
     az acr create -g $RG -n $ACR --sku Basic --admin-enabled true
 
-## 2. Build the image in Azure
+## 2. Build the image
+
+> **Trial and sponsored subscriptions cannot use `az acr build`.** ACR Tasks —
+> the in-Azure build service — is disabled on them, and the command fails with
+> `TasksOperationsNotAllowed`. If that happens, skip to *Building on GitHub
+> runners* below; it is the path this project actually uses.
 
 Run this from the repository root:
 
@@ -47,6 +52,30 @@ image so the first conversion after a deploy isn't a multi-minute stall.
 
 **This is the first time the Dockerfile has ever been built.** If it fails, the
 error is a genuine finding, not a misconfiguration on your end — send it over.
+
+### Building on GitHub runners
+
+`.github/workflows/image.yml` does the same build on GitHub's runners and pushes
+to the same registry. Beyond working around the ACR Tasks restriction, it builds
+natively on x86-64 (Container Apps does not run ARM images, so an Apple-silicon
+laptop would have to emulate) and pushes datacenter-to-datacenter instead of
+sending several gigabytes up a home connection.
+
+It needs three repository secrets:
+
+    az acr credential show -n $ACR --query "passwords[0].value" -o tsv | gh secret set ACR_PASSWORD
+    az acr credential show -n $ACR --query "username" -o tsv | gh secret set ACR_USERNAME
+    printf "$ACR.azurecr.io" | gh secret set ACR_LOGIN_SERVER
+
+Then dispatch it:
+
+    gh workflow run image.yml -f tag=0.4.0
+    gh run watch
+
+These are the registry's admin credentials. Rotate them with
+`az acr credential renew -n $ACR --password-name password` if they ever leak;
+for anything longer-lived than verification, replace them with a federated
+(OIDC) service principal so no password is stored at all.
 
 ## 3. Container Apps environment
 
