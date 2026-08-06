@@ -43,11 +43,11 @@ from docsift.services.conversion_service import convert_document
 
 result = convert_document(Path("report.html"))
 
-print(result.document_id)                    # doc_d8ce510ec576
-print(result.conversion.engine)              # markitdown
-print(result.metrics.estimated_tokens)       # 26
-print(len(result.chunks))                    # 1
-print(result.document.markdown[:40])         # '# Quarterly Report\n\nRevenue grew across '
+print(result.document_id)  # doc_d8ce510ec576
+print(result.conversion.engine)  # markitdown
+print(result.metrics.estimated_tokens)  # 26
+print(len(result.chunks))  # 1
+print(result.document.markdown[:40])  # '# Quarterly Report\n\nRevenue grew across '
 
 for chunk in result.chunks:
     print(chunk.chunk_id, chunk.section_path, chunk.estimated_tokens)
@@ -94,10 +94,10 @@ from docsift.core.options import ConversionOptions, ChunkOptions, CleanOptions
 options = ConversionOptions(
     chunk=ChunkOptions(max_tokens=800, overlap_tokens=100),
     clean=CleanOptions(
-        remove_image_refs=True,      # drop image-only lines
-        keep_page_markers=True,      # keep <!-- page: N --> comments
-        remove_furniture=True,       # strip repeated headers/footers
-        furniture_min_repeats=3,     # how many repeats before a line counts as furniture
+        remove_image_refs=True,  # drop image-only lines
+        keep_page_markers=True,  # keep <!-- page: N --> comments
+        remove_furniture=True,  # strip repeated headers/footers
+        furniture_min_repeats=3,  # how many repeats before a line counts as furniture
     ),
 )
 
@@ -114,9 +114,9 @@ cannot take effect.
 from docsift.services.inspection_service import inspect_document
 
 info = inspect_document(Path("report.pdf"))
-print(info.engine)              # docling
-print(info.engine_available)    # False if the docling extra isn't installed
-print(info.cached)              # True if this exact file+settings was converted before
+print(info.engine)  # docling
+print(info.engine_available)  # False if the docling extra isn't installed
+print(info.cached)  # True if this exact file+settings was converted before
 print(info.source.size_bytes)
 ```
 
@@ -129,10 +129,10 @@ Every DocSift failure inherits from one base class:
 
 ```python
 from docsift.core.exceptions import (
-    DocSiftError,              # base — catch this to catch everything
-    UnsupportedFileError,      # missing, empty, too large, or unsupported type
-    EngineNotAvailableError,   # the engine for this file type isn't installed
-    ConversionFailedError,     # the engine failed on this document
+    DocSiftError,  # base — catch this to catch everything
+    UnsupportedFileError,  # missing, empty, too large, or unsupported type
+    EngineNotAvailableError,  # the engine for this file type isn't installed
+    ConversionFailedError,  # the engine failed on this document
 )
 
 try:
@@ -159,9 +159,9 @@ from docsift.services.search_service import search_document
 response = search_document(
     "doc_d8ce510ec576",
     "operational risk",
-    limit=5,          # direct matches, 1–20
+    limit=5,  # direct matches, 1–20
     max_tokens=5000,  # cap on the whole response, 1–20000
-    context=0,        # adjacent chunks either side, 0–2
+    context=0,  # adjacent chunks either side, 0–2
 )
 
 for hit in response.results:
