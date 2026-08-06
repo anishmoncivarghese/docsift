@@ -172,16 +172,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     job_service.shutdown()
 
 
-def _public_url() -> str:
-    """Base URL advertised in the OpenAPI document.
+def _public_url() -> str | None:
+    """Base URL advertised in the OpenAPI document, or None when unconfigured.
 
-    A custom connector needs a host, and Swagger 2.0 requires one, so the
-    document cannot rely on the request's own origin the way a browser client can.
+    A custom connector needs a host, and Swagger 2.0 requires one, so
+    `docsift openapi --format swagger2` needs this set to point at a real
+    deployment. But a served /openapi.json that defaults to
+    http://127.0.0.1:8000 would misrepresent a service actually reachable
+    elsewhere -- breaking "Try it out" on its own /docs and misdirecting any
+    regenerated client -- so the live document only advertises a server when
+    one is explicitly configured. `to_swagger2` falls back to
+    http://127.0.0.1:8000 on its own when servers is absent, so connector
+    generation is unaffected.
     """
-    return os.environ.get("DOCSIFT_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+    raw = os.environ.get("DOCSIFT_PUBLIC_URL")
+    return raw.rstrip("/") if raw else None
 
 
 def create_app() -> FastAPI:
+    public_url = _public_url()
     app = FastAPI(
         title="DocSift",
         version=__version__,
@@ -192,7 +201,7 @@ def create_app() -> FastAPI:
             "asynchronous: upload returns a job id immediately and the caller "
             "polls until the job succeeds."
         ),
-        servers=[{"url": _public_url(), "description": "DocSift service"}],
+        servers=[{"url": public_url, "description": "DocSift service"}] if public_url else None,
         lifespan=lifespan,
     )
     app.add_middleware(BodySizeLimitMiddleware)

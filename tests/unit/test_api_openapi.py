@@ -92,8 +92,14 @@ def test_servers_entry_is_present_and_configurable(monkeypatch):
     assert document["servers"][0]["url"] == "https://docsift.example.com"
 
 
-def test_servers_entry_defaults_to_localhost(monkeypatch):
+def test_servers_entry_is_absent_when_no_public_url_is_configured(monkeypatch):
+    # A 0.3.0 deployment that sets nothing must see no behavior change: a
+    # servers entry defaulting to http://127.0.0.1:8000 would break "Try it
+    # out" on a service actually reachable elsewhere, and would misdirect any
+    # client regenerated from this document. to_swagger2 already falls back
+    # to http://127.0.0.1:8000 for connector generation when servers is
+    # absent, so this only affects the OpenAPI 3.1 document.
     monkeypatch.delenv("DOCSIFT_PUBLIC_URL", raising=False)
     with TestClient(create_app()) as client:
         document = client.get("/openapi.json").json()
-    assert document["servers"][0]["url"] == "http://127.0.0.1:8000"
+    assert "servers" not in document
