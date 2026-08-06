@@ -65,6 +65,10 @@ include = [
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# Planning documents contain illustrative Python fragments — indented method
+# bodies, partial call sites — that are not valid standalone modules. Ruff
+# formats code blocks inside Markdown, so linting them fails CI on prose.
+extend-exclude = ["docs/superpowers/plans"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
