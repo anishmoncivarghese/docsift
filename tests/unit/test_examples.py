@@ -1,4 +1,5 @@
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 EXAMPLES = Path(__file__).parent.parent.parent / "examples"
+PROJECT_ROOT = EXAMPLES.parent
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +67,42 @@ def test_n8n_workflow_polls_before_searching():
     assert any("search" in name.lower() for name in names)
 
 
+def test_n8n_workflow_supplies_a_runnable_sample_document():
+    workflow = json.loads(
+        (EXAMPLES / "n8n" / "docsift-convert-and-search.json").read_text(encoding="utf-8")
+    )
+    nodes = {node["name"]: node for node in workflow["nodes"]}
+    sample = nodes["Create sample document"]
+    assert sample["type"] == "n8n-nodes-base.code"
+    assert "binary" in sample["parameters"]["jsCode"]
+    assert "data" in sample["parameters"]["jsCode"]
+    assert workflow["connections"]["Settings"]["main"][0][0]["node"] == sample["name"]
+    assert workflow["connections"][sample["name"]]["main"][0][0]["node"] == (
+        "Upload document"
+    )
+
+
+def test_n8n_workflow_stops_failed_jobs_and_limits_polling():
+    workflow = json.loads(
+        (EXAMPLES / "n8n" / "docsift-convert-and-search.json").read_text(encoding="utf-8")
+    )
+    nodes = {node["name"]: node for node in workflow["nodes"]}
+    assert "Conversion failed?" in nodes
+    assert nodes["Stop failed conversion"]["type"] == "n8n-nodes-base.stopAndError"
+    assert "Polling limit reached?" in nodes
+    assert nodes["Stop polling timeout"]["type"] == "n8n-nodes-base.stopAndError"
+
+    settings = nodes["Settings"]["parameters"]["assignments"]["assignments"]
+    assert any(item["name"] == "maxPolls" and item["value"] > 0 for item in settings)
+
+    failed_outputs = workflow["connections"]["Conversion failed?"]["main"]
+    assert failed_outputs[0][0]["node"] == "Stop failed conversion"
+    assert failed_outputs[1][0]["node"] == "Polling limit reached?"
+    limit_outputs = workflow["connections"]["Polling limit reached?"]["main"]
+    assert limit_outputs[0][0]["node"] == "Stop polling timeout"
+    assert limit_outputs[1][0]["node"] == "Wait before polling"
+
+
 def test_connector_instructions_reference_real_operation_ids():
     from docsift.api.app import create_app
 
@@ -96,3 +134,11 @@ def test_power_automate_example_uses_a_do_until_loop():
     text = (EXAMPLES / "power-automate" / "README.md").read_text(encoding="utf-8").lower()
     assert "do until" in text
     assert "getjobstatus" in text.replace(" ", "")
+
+
+def test_examples_are_included_in_the_wheel():
+    project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"][
+        "force-include"
+    ]
+    assert force_include["examples"] == "docsift/examples"

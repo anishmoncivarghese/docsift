@@ -211,6 +211,8 @@ def to_swagger2(openapi: dict) -> dict:
                 converted["consumes"] = consumes
             if produces:
                 converted["produces"] = produces
+            if "security" in operation:
+                converted["security"] = operation["security"]
             converted_path[method] = converted
         swagger["paths"][path] = converted_path
 

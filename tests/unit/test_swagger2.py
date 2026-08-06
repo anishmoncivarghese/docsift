@@ -89,7 +89,22 @@ def test_api_key_scheme_is_converted(monkeypatch):
         "in": "header",
         "name": "X-API-Key",
     }
-    assert swagger["security"] == [{"ApiKeyHeader": []}]
+    assert "security" not in swagger
+    for path, path_item in swagger["paths"].items():
+        for operation in path_item.values():
+            if path.startswith("/v1/"):
+                assert operation["security"] == [{"ApiKeyHeader": []}]
+            else:
+                assert "security" not in operation
+
+
+def test_api_key_is_not_converted_to_an_ordinary_header_parameter(monkeypatch):
+    monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
+    swagger = to_swagger2(_document())
+    for path_item in swagger["paths"].values():
+        for operation in path_item.values():
+            names = {parameter["name"].lower() for parameter in operation.get("parameters", [])}
+            assert "x-api-key" not in names
 
 
 def test_an_unhandled_construct_raises_rather_than_emitting_a_broken_file():

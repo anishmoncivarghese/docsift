@@ -93,6 +93,18 @@ def test_wrong_key_is_rejected_without_echoing_it(engine, monkeypatch):
     assert "wrong-guess-value" not in response.text
 
 
+def test_missing_key_is_rejected_before_multipart_body_is_parsed(monkeypatch):
+    monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
+    with _client() as client:
+        response = client.post(
+            "/v1/documents",
+            content=b"not valid multipart data",
+            headers={"Content-Type": "multipart/form-data; boundary=missing"},
+        )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "invalid or missing API key"
+
+
 def test_health_and_version_stay_open(monkeypatch):
     monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
     with _client() as client:
@@ -111,3 +123,21 @@ def test_security_scheme_appears_only_when_a_key_is_configured(monkeypatch):
         document = client.get("/openapi.json").json()
     scheme = document["components"]["securitySchemes"]["ApiKeyHeader"]
     assert scheme == {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+
+    assert "security" not in document
+    for path, path_item in document["paths"].items():
+        for operation in path_item.values():
+            if path.startswith("/v1/"):
+                assert operation["security"] == [{"ApiKeyHeader": []}]
+            else:
+                assert "security" not in operation
+
+
+def test_api_key_is_not_exposed_as_an_ordinary_operation_parameter(monkeypatch):
+    monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
+    with _client() as client:
+        document = client.get("/openapi.json").json()
+    for path_item in document["paths"].values():
+        for operation in path_item.values():
+            names = {parameter["name"].lower() for parameter in operation.get("parameters", [])}
+            assert "x-api-key" not in names

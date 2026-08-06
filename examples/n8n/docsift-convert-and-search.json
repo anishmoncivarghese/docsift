@@ -30,6 +30,12 @@
               "name": "query",
               "value": "operational risk",
               "type": "string"
+            },
+            {
+              "id": "max-polls",
+              "name": "maxPolls",
+              "value": 60,
+              "type": "number"
             }
           ]
         },
@@ -40,6 +46,16 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first();\nconst text = '# DocSift n8n sample\\n\\nOperational risk controls are reviewed monthly.\\n';\nreturn [{\n  json: input.json,\n  binary: {\n    data: {\n      data: Buffer.from(text, 'utf8').toString('base64'),\n      mimeType: 'text/plain',\n      fileName: 'docsift-sample.txt'\n    }\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "sample-document-node",
+      "name": "Create sample document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 0]
     },
     {
       "parameters": {
@@ -71,7 +87,7 @@
       "name": "Upload document",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [400, 0]
+      "position": [600, 0]
     },
     {
       "parameters": {
@@ -82,17 +98,17 @@
       "name": "Wait before polling",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [600, 0]
+      "position": [800, 0]
     },
     {
       "parameters": {
-        "url": "={{ $('Settings').item.json.baseUrl }}/v1/jobs/{{ $('Upload document').item.json.job_id }}",
+        "url": "={{ $('Settings').first().json.baseUrl }}/v1/jobs/{{ $('Upload document').first().json.job_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "X-API-Key",
-              "value": "={{ $('Settings').item.json.apiKey }}"
+              "value": "={{ $('Settings').first().json.apiKey }}"
             }
           ]
         },
@@ -102,7 +118,28 @@
       "name": "Poll job status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, 0]
+      "position": [1000, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "poll-count",
+              "name": "pollCount",
+              "value": "={{ $runIndex + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "count-poll-node",
+      "name": "Count poll attempt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1200, 0]
     },
     {
       "parameters": {
@@ -126,20 +163,94 @@
         "options": {}
       },
       "id": "if-node",
-      "name": "Conversion finished?",
+      "name": "Conversion succeeded?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1000, 0]
+      "position": [1400, 0]
     },
     {
       "parameters": {
-        "url": "={{ $('Settings').item.json.baseUrl }}/v1/documents/{{ $('Upload document').item.json.document_id }}/search",
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "failed-node",
+      "name": "Conversion failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1600, 100]
+    },
+    {
+      "parameters": {
+        "errorMessage": "DocSift reported that document conversion failed. Inspect the Poll job status output for details."
+      },
+      "id": "stop-failed-node",
+      "name": "Stop failed conversion",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1800, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.pollCount }}",
+              "rightValue": "={{ $('Settings').first().json.maxPolls }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "poll-limit-node",
+      "name": "Polling limit reached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1800, 200]
+    },
+    {
+      "parameters": {
+        "errorMessage": "DocSift conversion did not finish before maxPolls was reached."
+      },
+      "id": "stop-timeout-node",
+      "name": "Stop polling timeout",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [2000, 100]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Settings').first().json.baseUrl }}/v1/documents/{{ $('Upload document').first().json.document_id }}/search",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "q",
-              "value": "={{ $('Settings').item.json.query }}"
+              "value": "={{ $('Settings').first().json.query }}"
             },
             {
               "name": "limit",
@@ -156,7 +267,7 @@
           "parameters": [
             {
               "name": "X-API-Key",
-              "value": "={{ $('Settings').item.json.apiKey }}"
+              "value": "={{ $('Settings').first().json.apiKey }}"
             }
           ]
         },
@@ -166,7 +277,7 @@
       "name": "Search document",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, -100]
+      "position": [1600, -100]
     }
   ],
   "connections": {
@@ -182,6 +293,17 @@
       ]
     },
     "Settings": {
+      "main": [
+        [
+          {
+            "node": "Create sample document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create sample document": {
       "main": [
         [
           {
@@ -218,18 +340,65 @@
       "main": [
         [
           {
-            "node": "Conversion finished?",
+            "node": "Count poll attempt",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Conversion finished?": {
+    "Count poll attempt": {
+      "main": [
+        [
+          {
+            "node": "Conversion succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversion succeeded?": {
       "main": [
         [
           {
             "node": "Search document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Conversion failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversion failed?": {
+      "main": [
+        [
+          {
+            "node": "Stop failed conversion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Polling limit reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Polling limit reached?": {
+      "main": [
+        [
+          {
+            "node": "Stop polling timeout",
             "type": "main",
             "index": 0
           }
