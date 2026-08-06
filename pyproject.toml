@@ -43,6 +43,15 @@ dev = [
   "httpx>=0.27",
   "openapi-spec-validator>=0.7",
 ]
+# Not a real dependency set -- torch and torchvision already arrive with the
+# docling extra. Declaring them here makes them *direct* requirements, which is
+# the only way [tool.uv.sources] can redirect them to the CPU index; uv sources
+# do not apply to transitive dependencies. A group (rather than an extra) keeps
+# this out of the published wheel's metadata entirely. The Dockerfile syncs it.
+cpu-torch = [
+  "torch",
+  "torchvision",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -61,6 +70,23 @@ include = [
   "examples",
   "pyproject.toml",
 ]
+
+[[tool.uv.index]]
+# Docling pulls in torch, and the default Linux wheel bundles CUDA runtimes --
+# several GB of GPU code that a CPU-only container will never execute. This
+# index serves the CPU builds instead. `explicit = true` means nothing resolves
+# here unless [tool.uv.sources] below names it.
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+# Linux only: macOS torch wheels have no CUDA variant to avoid, and pinning the
+# index there would break local development on Apple silicon. These are uv
+# development-time sources -- they do not appear in the published wheel's
+# metadata, so `pip install docsift[docling]` is unaffected.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.ruff]
 line-length = 100

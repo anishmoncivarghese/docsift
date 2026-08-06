@@ -174,6 +174,16 @@ set nothing, the service behaves exactly as it did before.
 That uses a named volume (`docsift-data`) for `/data`, where the SQLite
 database and stored documents live.
 
+The image installs **both** engines. Routing sends every PDF to Docling with no
+fallback, so an API-only image without it would fail on the format the service
+exists for. That makes the image large — Docling's model weights are baked in at
+build time rather than downloaded on first use, so the first conversion after a
+deploy is not a multi-minute stall and the running container needs no outbound
+access to Hugging Face. Torch is pinned to the CPU wheels; the default Linux
+build bundles CUDA runtimes that a CPU container will never execute.
+
+Expect a slow first build (model download) and a multi-gigabyte image.
+
 **Use a named volume, not a bare host bind mount.** The container runs as
 uid 10001, not root. A named volume like the example above is created
 owned by that user automatically. A host bind mount
