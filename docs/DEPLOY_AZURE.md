@@ -32,6 +32,15 @@ Run this from the repository root:
 
     az acr build -r $ACR -t docsift:0.4.0 .
 
+The trailing `.` is your **local working directory**, not GitHub. The CLI
+uploads that folder to Azure and builds it there — nothing is pulled from the
+repository, so a private repo needs no credentials. `.dockerignore` keeps the
+upload small: the 1.3 GB `.venv`, plus `.git`, `dist`, `docs` and `tests`, are
+all excluded.
+
+Because it is your working directory, uncommitted local edits *are* included.
+Commit first if you want the image to match what is on `main`.
+
 Expect this to take a while and to produce a multi-gigabyte image. The build
 installs both conversion engines and bakes Docling's model weights into the
 image so the first conversion after a deploy isn't a multi-minute stall.
