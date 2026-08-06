@@ -122,6 +122,56 @@ def test_an_unhandled_construct_raises_rather_than_emitting_a_broken_file():
         to_swagger2(document)
 
 
+def test_oneOf_in_a_parameter_raises():
+    document = _document()
+    document["paths"]["/v1/documents/{document_id}/search"]["get"]["parameters"].append(
+        {
+            "name": "weird",
+            "in": "query",
+            "schema": {"oneOf": [{"type": "string"}, {"type": "integer"}]},
+        }
+    )
+    with pytest.raises(UnsupportedConstructError, match="oneOf"):
+        to_swagger2(document)
+
+
+def test_oneOf_in_a_schema_raises():
+    document = _document()
+    document["components"]["schemas"]["JobStatusResponse"]["oneOf"] = [
+        {"type": "string"},
+        {"type": "integer"},
+    ]
+    with pytest.raises(UnsupportedConstructError, match="oneOf"):
+        to_swagger2(document)
+
+
+def test_cookie_parameter_raises():
+    document = _document()
+    document["paths"]["/v1/documents/{document_id}/search"]["get"]["parameters"].append(
+        {"name": "session", "in": "cookie", "schema": {"type": "string"}}
+    )
+    with pytest.raises(UnsupportedConstructError, match="cookie"):
+        to_swagger2(document)
+
+
+def test_31_native_nullable_type_list_raises():
+    document = _document()
+    document["components"]["schemas"]["JobStatusResponse"]["properties"]["error"] = {
+        "type": ["string", "null"]
+    }
+    with pytest.raises(UnsupportedConstructError, match="type"):
+        to_swagger2(document)
+
+
+def test_allOf_in_a_schema_still_passes_through():
+    document = _document()
+    document["components"]["schemas"]["JobStatusResponse"]["allOf"] = [
+        {"type": "object", "properties": {"extra": {"type": "string"}}}
+    ]
+    swagger = to_swagger2(document)
+    assert swagger["definitions"]["JobStatusResponse"]["allOf"]
+
+
 def test_cli_writes_a_swagger2_file(tmp_path):
     import json
 

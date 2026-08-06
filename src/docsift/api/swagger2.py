@@ -2,8 +2,27 @@
 
 Power Platform custom connectors accept Swagger 2.0; FastAPI emits OpenAPI 3.1,
 so the generated document cannot be imported directly. This converter handles
-the constructs this API actually uses and raises on anything else, so a route
-added later cannot silently produce a connector file that fails to import.
+the constructs this API's own routes and models produce today; the test suite
+pins that current shape, so a change to a route or schema that shifts it out
+of what's handled here should break a test.
+
+It does not detect every OpenAPI construct that Swagger 2.0 cannot represent.
+It explicitly raises `UnsupportedConstructError` for the ones known to be both
+illegal in Swagger 2.0 and plausible for this API to someday emit: a request
+body media type outside multipart/form-data and application/json, a `cookie`
+parameter, `oneOf` anywhere in a parameter or schema, and a literal 3.1-style
+type list (e.g. `type: ["string", "null"]`) that `_flatten_nullable` did not
+already reduce via the `anyOf: [X, null]` idiom. Anything else -- an extra
+response media type, a non-scalar `anyOf` (e.g. object|array), and so on --
+passes through unexamined; it may produce a document a connector wizard
+rejects rather than raising here. `allOf` is left alone deliberately: Swagger
+2.0 supports it in schemas, so there is nothing to convert.
+
+One conversion is lossy without raising: `_flatten_nullable` collapses an
+`anyOf` of all-scalar types (Pydantic emits this for
+`ValidationError.loc: str | int`) down to a single `type: string`, because
+Swagger 2.0 has no union type. That is a deliberate approximation for a
+diagnostic-only field, not a general-purpose union encoding.
 """
 
 from typing import Any
@@ -44,6 +63,20 @@ def _flatten_nullable(node: Any) -> Any:
         return node
 
     node = {key: _flatten_nullable(value) for key, value in node.items()}
+    if "oneOf" in node:
+        # Illegal in Swagger 2.0 (which has no discriminated-union keyword),
+        # and unlike anyOf-with-null there is no single safe collapse -- the
+        # branches are meant to be mutually exclusive alternatives, not one
+        # optional type.
+        raise UnsupportedConstructError(f"oneOf is not representable in Swagger 2.0: {node}")
+    if isinstance(node.get("type"), list):
+        # The OpenAPI 3.1-native nullable idiom, e.g. type: ["string", "null"].
+        # Only the anyOf: [X, null] shape (Pydantic's own idiom) is flattened
+        # above; a literal list here means something this converter has not
+        # been taught to reduce.
+        raise UnsupportedConstructError(
+            f"type as a list is not representable in Swagger 2.0: {node['type']!r}"
+        )
     options = node.get("anyOf")
     if isinstance(options, list):
         non_null = [option for option in options if option.get("type") != "null"]
@@ -183,6 +216,12 @@ def to_swagger2(openapi: dict) -> dict:
     for path, operations in openapi.get("paths", {}).items():
         converted_path: dict[str, Any] = {}
         for method, operation in operations.items():
+            for parameter in operation.get("parameters", []):
+                if parameter.get("in") == "cookie":
+                    raise UnsupportedConstructError(
+                        f"cookie parameters are not representable in Swagger 2.0: "
+                        f"{parameter.get('name')}"
+                    )
             parameters = [
                 _flatten_nullable(_convert_refs(parameter))
                 for parameter in operation.get("parameters", [])
