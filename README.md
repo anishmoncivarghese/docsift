@@ -137,6 +137,9 @@ Import that file as a Power Platform custom connector. The service's own
 `/openapi.json` is OpenAPI 3.1, which custom connectors do not accept — this
 command emits the Swagger 2.0 they need.
 
+A full walkthrough — Python usage, hosting, and step-by-step Copilot Studio and
+Power Automate setup — is in [docs/USING_DOCSIFT.md](docs/USING_DOCSIFT.md).
+
 Worked guides live in `examples/`:
 
 - `examples/n8n/` — a workflow you can import directly: upload, poll, search.
