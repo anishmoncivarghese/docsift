@@ -21,6 +21,11 @@ cloud.
    parameter name `X-API-Key`, location `Header`. (Skip this only if the service
    runs with no `DOCSIFT_API_KEY`, which means anyone who reaches the URL can
    use it.)
+
+   The generated connector always declares this API-key header, regardless of
+   whether `DOCSIFT_API_KEY` happened to be set in the shell you generated it
+   from — you configure the actual key value here, on the Security tab, not by
+   regenerating the file.
 4. **Create connector**, then **Test** with a connection using your key.
 
 ## 3. Use it from Copilot Studio

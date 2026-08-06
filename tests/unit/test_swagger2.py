@@ -87,6 +87,26 @@ def test_nullable_unions_are_flattened():
     assert job["x-nullable"] is True
 
 
+def test_swagger2_always_declares_the_api_key_security_even_when_unconfigured():
+    # The natural workflow is generate-on-a-laptop, run-keyed-in-production.
+    # If the connector only carried security when DOCSIFT_API_KEY happened to
+    # be set in the generating shell, every Power Platform call against a
+    # keyed deployment would 401 with no obvious cause. The isolated fixture
+    # already ensures DOCSIFT_API_KEY is unset here.
+    swagger = to_swagger2(_document())
+    assert swagger["securityDefinitions"]["ApiKeyHeader"] == {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+    }
+    for path, path_item in swagger["paths"].items():
+        for operation in path_item.values():
+            if path.startswith("/v1/"):
+                assert operation["security"] == [{"ApiKeyHeader": []}]
+            else:
+                assert "security" not in operation
+
+
 def test_api_key_scheme_is_converted(monkeypatch):
     monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
     swagger = to_swagger2(_document())

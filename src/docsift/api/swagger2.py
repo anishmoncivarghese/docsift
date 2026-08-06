@@ -32,6 +32,14 @@ from docsift.core.exceptions import DocSiftError
 
 _SUPPORTED_REQUEST_MEDIA = {"multipart/form-data", "application/json"}
 
+# The connector always declares the API-key header, regardless of whether
+# DOCSIFT_API_KEY happened to be set in the shell that generated it. The
+# common workflow is generate-on-a-laptop, run-keyed-in-production; a
+# connector with no security declaration produces 401s with no obvious
+# cause against a keyed deployment. A service running without a key simply
+# ignores the header, so declaring it is harmless in the unkeyed case.
+_API_KEY_SECURITY_SCHEME = {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+
 
 class UnsupportedConstructError(DocSiftError):
     """The OpenAPI document uses something this converter does not handle."""
@@ -258,18 +266,14 @@ def to_swagger2(openapi: dict) -> dict:
                 converted["consumes"] = consumes
             if produces:
                 converted["produces"] = produces
-            if "security" in operation:
-                converted["security"] = operation["security"]
+            if path.startswith("/v1/"):
+                converted["security"] = [{"ApiKeyHeader": []}]
             converted_path[method] = converted
         swagger["paths"][path] = converted_path
 
     if schemas:
         swagger["definitions"] = _convert_refs(_flatten_nullable(schemas))
 
-    schemes_in = openapi.get("components", {}).get("securitySchemes")
-    if schemes_in:
-        swagger["securityDefinitions"] = schemes_in
-    if openapi.get("security"):
-        swagger["security"] = openapi["security"]
+    swagger["securityDefinitions"] = {"ApiKeyHeader": _API_KEY_SECURITY_SCHEME}
 
     return swagger
