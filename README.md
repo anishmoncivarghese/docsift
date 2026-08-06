@@ -6,7 +6,7 @@ DocSift converts PDFs and Office documents into clean, structured, AI-ready
 Markdown and JSON — locally, with no cloud APIs. Docling handles PDFs;
 MarkItDown handles the breadth formats; both sit behind one interface.
 
-**v0.3.0**
+**v0.4.0**
 
 ## Install
 
@@ -126,8 +126,34 @@ worker reaches it, so the backlog is bounded by `DOCSIFT_MAX_PENDING_JOBS`
 frees up.
 
 **Running untrusted documents:** the service converts whatever it is given.
-Run it on infrastructure you control, behind your own authentication — DocSift
-has none of its own.
+Run it on infrastructure you control and enable the shared API key described
+below before making it reachable by other tools.
+
+## Connecting Copilot Studio, Power Automate and n8n
+
+    DOCSIFT_PUBLIC_URL=https://docsift.internal docsift openapi --format swagger2 -o docsift-connector.json
+
+Import that file as a Power Platform custom connector. The service's own
+`/openapi.json` is OpenAPI 3.1, which custom connectors do not accept — this
+command emits the Swagger 2.0 they need.
+
+Worked guides live in `examples/`:
+
+- `examples/n8n/` — a workflow you can import directly: upload, poll, search.
+- `examples/copilot-studio/` — connector setup and which operations to expose.
+- `examples/power-automate/` — the *Do until* flow that waits for conversion.
+
+## Protecting the service
+
+Set `DOCSIFT_API_KEY` and every `/v1/*` route requires an `X-API-Key` header:
+
+    DOCSIFT_API_KEY=your-shared-secret docsift serve
+    curl -H "X-API-Key: your-shared-secret" http://127.0.0.1:8000/v1/documents/...
+
+`/health`, `/version` and `/openapi.json` stay open so container health checks
+and connector imports keep working. This is one shared secret for the whole
+service — not per-user identity, and no substitute for network controls. If you
+set nothing, the service behaves exactly as it did before.
 
 ## Docker
 
@@ -179,8 +205,12 @@ as a volume.
   is still fully buffered by the framework's multipart parser before the
   size check runs -- the check is still correct, just no longer early, for
   that case.
-- The API has no authentication, rate limiting or multi-tenancy. Do not expose
-  it directly to the internet.
+- The API's optional `DOCSIFT_API_KEY` is a single shared secret. There is no
+  per-user identity, no rate limiting and no multi-tenancy — keep the service on
+  infrastructure you control.
+- A Copilot Studio action cannot poll a long-running conversion. Search works as
+  a direct connector call; uploading needs a Power Automate flow with a
+  *Do until* loop (see `examples/`).
 - Search is lexical SQLite FTS5 retrieval, not semantic search: it does not
   understand synonyms, correct spelling, or match concepts absent from the
   indexed words. Local embeddings and hybrid retrieval remain planned for a
@@ -221,6 +251,8 @@ as a volume.
 | `DOCSIFT_MAX_UPLOAD_BYTES` | `52428800` (50 MB) | Upload size ceiling; can be raised or lowered. |
 | `DOCSIFT_JOB_WORKERS` | `2` | Background conversion threads. |
 | `DOCSIFT_MAX_PENDING_JOBS` | `32` | Queued + in-flight job ceiling; `POST /v1/documents` returns `503` past it. |
+| `DOCSIFT_API_KEY` | unset | Optional shared secret required as `X-API-Key` on `/v1/*` routes. |
+| `DOCSIFT_PUBLIC_URL` | `http://127.0.0.1:8000` | Reachable base URL advertised in OpenAPI and Swagger connector documents. |
 
 ## License
 

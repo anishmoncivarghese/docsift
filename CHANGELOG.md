@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0 — 2026-08-06
+
+Makes DocSift usable from Copilot Studio, Power Automate and n8n.
+
+- New `docsift openapi --format swagger2` emits a **Swagger 2.0** document.
+  Power Platform custom connectors do not accept the OpenAPI 3.1 document the
+  service serves at `/openapi.json`, so this is what you import.
+- New optional API key. Set `DOCSIFT_API_KEY` and every `/v1/*` route requires an
+  `X-API-Key` header; `/health`, `/version` and `/openapi.json` stay open.
+  **Off by default** — an existing deployment that sets nothing behaves exactly
+  as before. This is a single shared secret, not per-user identity.
+- Every API operation now carries a summary and a description written for agent
+  tool selection, including when to prefer search over retrieving a whole
+  document.
+- The OpenAPI document declares a `servers` entry, set with
+  `DOCSIFT_PUBLIC_URL` (default `http://127.0.0.1:8000`). A connector needs a
+  reachable host.
+- New `examples/`: an importable n8n workflow that uploads, polls and searches;
+  Copilot Studio custom connector instructions; and a Power Automate flow with
+  the *Do until* polling loop.
+
+**A Copilot Studio action cannot poll.** Search works as a direct connector call.
+Uploading needs a Power Automate flow to wait for conversion — the examples
+explain the split rather than pretending one action can wait minutes.
+
 ## 0.3.0 — 2026-08-05
 
 Adds local keyword and phrase retrieval (Milestone 5).
