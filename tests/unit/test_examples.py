@@ -77,9 +77,7 @@ def test_n8n_workflow_supplies_a_runnable_sample_document():
     assert "binary" in sample["parameters"]["jsCode"]
     assert "data" in sample["parameters"]["jsCode"]
     assert workflow["connections"]["Settings"]["main"][0][0]["node"] == sample["name"]
-    assert workflow["connections"][sample["name"]]["main"][0][0]["node"] == (
-        "Upload document"
-    )
+    assert workflow["connections"][sample["name"]]["main"][0][0]["node"] == ("Upload document")
 
 
 def test_n8n_workflow_stops_failed_jobs_and_limits_polling():
@@ -138,7 +136,5 @@ def test_power_automate_example_uses_a_do_until_loop():
 
 def test_examples_are_included_in_the_wheel():
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"][
-        "force-include"
-    ]
+    force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
     assert force_include["examples"] == "docsift/examples"

@@ -110,7 +110,9 @@ class BodySizeLimitMiddleware:
         await self.app(scope, receive, send)
 
 
-_OPEN_PATHS = frozenset({"/health", "/version", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"})
+_OPEN_PATHS = frozenset(
+    {"/health", "/version", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"}
+)
 
 
 def _is_protected(route_path: str) -> bool:
@@ -143,8 +145,7 @@ class ApiKeyMiddleware:
         configured = get_settings().api_key
         submitted = dict(scope.get("headers") or {}).get(b"x-api-key")
         accepted = configured is None or (
-            submitted is not None
-            and secrets.compare_digest(submitted, configured.encode("utf-8"))
+            submitted is not None and secrets.compare_digest(submitted, configured.encode("utf-8"))
         )
         if accepted:
             await self.app(scope, receive, send)
