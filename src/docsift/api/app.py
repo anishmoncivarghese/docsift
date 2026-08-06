@@ -35,6 +35,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
+from starlette.routing import get_route_path
 
 from docsift import __version__
 from docsift.api.schemas import (
@@ -109,6 +110,19 @@ class BodySizeLimitMiddleware:
         await self.app(scope, receive, send)
 
 
+_OPEN_PATHS = frozenset({"/health", "/version", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"})
+
+
+def _is_protected(route_path: str) -> bool:
+    """Everything except the explicitly open routes needs the key.
+
+    Deny-by-default: a route added later is protected unless someone
+    deliberately opens it, rather than open unless someone remembers to
+    protect it.
+    """
+    return route_path not in _OPEN_PATHS
+
+
 class ApiKeyMiddleware:
     """Protect API routes before FastAPI reads or parses the request body."""
 
@@ -116,7 +130,13 @@ class ApiKeyMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/v1/"):
+        # uvicorn prepends `root_path` onto scope["path"] (e.g. "/api/v1/jobs/x"
+        # under --root-path /api), while Starlette's router strips it back off
+        # before matching routes. Comparing against the raw ASGI path would let
+        # a deployment under a root_path bypass the key entirely, since the
+        # router would match "/v1/jobs/x" while this check saw "/api/v1/jobs/x".
+        # get_route_path returns what the router actually matches on.
+        if scope["type"] != "http" or not _is_protected(get_route_path(scope)):
             await self.app(scope, receive, send)
             return
 

@@ -113,6 +113,47 @@ def test_health_and_version_stay_open(monkeypatch):
         assert client.get("/openapi.json").status_code == 200
 
 
+def test_api_key_is_enforced_under_a_root_path(monkeypatch):
+    """uvicorn prepends root_path to scope['path']; the guard must not be fooled."""
+    import anyio
+
+    monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
+    from docsift.api.app import create_app
+
+    app = create_app()
+    sent: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/api/v1/jobs/job_abc",
+        "raw_path": b"/api/v1/jobs/job_abc",
+        "root_path": "/api",
+        "query_string": b"",
+        "headers": [(b"host", b"testserver")],
+        "client": ("test", 1),
+        "server": ("testserver", 80),
+    }
+    anyio.run(app, scope, receive, send)
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    assert start["status"] == 401
+
+
+def test_an_unknown_route_outside_v1_still_requires_the_key(monkeypatch):
+    monkeypatch.setenv("DOCSIFT_API_KEY", "s3cret")
+    with _client() as client:
+        assert client.get("/admin/whatever").status_code == 401
+
+
 def test_security_scheme_appears_only_when_a_key_is_configured(monkeypatch):
     with _client() as client:
         document = client.get("/openapi.json").json()
