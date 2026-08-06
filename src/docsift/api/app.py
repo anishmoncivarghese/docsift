@@ -11,6 +11,7 @@ limitations for the user-facing note.
 """
 
 import json
+import os
 import sqlite3
 import tempfile
 from collections.abc import AsyncIterator
@@ -104,11 +105,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     job_service.shutdown()
 
 
+def _public_url() -> str:
+    """Base URL advertised in the OpenAPI document.
+
+    A custom connector needs a host, and Swagger 2.0 requires one, so the
+    document cannot rely on the request's own origin the way a browser client can.
+    """
+    return os.environ.get("DOCSIFT_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="DocSift",
         version=__version__,
         summary="Convert documents once. Give agents only what they need.",
+        description=(
+            "Convert PDFs and Office documents into clean Markdown and "
+            "token-budgeted chunks, then search them. Conversion is "
+            "asynchronous: upload returns a job id immediately and the caller "
+            "polls until the job succeeds."
+        ),
+        servers=[{"url": _public_url(), "description": "DocSift service"}],
         lifespan=lifespan,
     )
     app.add_middleware(BodySizeLimitMiddleware)
@@ -127,11 +144,29 @@ def create_app() -> FastAPI:
         errors = [{k: v for k, v in error.items() if k != "input"} for error in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
-    @app.get("/health", response_model=HealthResponse, operation_id="getHealth")
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        operation_id="getHealth",
+        summary="Check service health",
+        description=(
+            "Return ok when the service is running. Use this to verify connectivity "
+            "before uploading a document."
+        ),
+    )
     def health() -> HealthResponse:
         return HealthResponse(status="ok")
 
-    @app.get("/version", response_model=VersionResponse, operation_id="getVersion")
+    @app.get(
+        "/version",
+        response_model=VersionResponse,
+        operation_id="getVersion",
+        summary="Get service version",
+        description=(
+            "Return the running DocSift version. Useful for confirming which release "
+            "a deployment is on."
+        ),
+    )
     def version() -> VersionResponse:
         return VersionResponse(version=__version__)
 
@@ -140,6 +175,13 @@ def create_app() -> FastAPI:
         response_model=JobAccepted,
         status_code=202,
         operation_id="uploadDocument",
+        summary="Upload a document for conversion",
+        description=(
+            "Accept a PDF or Office document and start converting it in the background. "
+            "Returns immediately with a job id and a document id. Conversion can take "
+            "minutes, so poll the job with getJobStatus until its status is succeeded, "
+            "then retrieve the result. Do not assume the document is ready when this returns."
+        ),
     )
     async def upload_document(
         file: UploadFile = File(...),
@@ -220,6 +262,13 @@ def create_app() -> FastAPI:
         "/v1/jobs/{job_id}",
         response_model=JobStatusResponse,
         operation_id="getJobStatus",
+        summary="Check conversion progress",
+        description=(
+            "Return the status of a conversion job: queued, processing, succeeded or failed. "
+            "Poll this after uploadDocument until the status is succeeded or failed. The "
+            "document id is present even when the job fails, so always check the status "
+            "before retrieving the document."
+        ),
     )
     def get_job(job_id: str) -> JobStatusResponse:
         record = job_service.get(job_id)
@@ -236,6 +285,12 @@ def create_app() -> FastAPI:
         "/v1/documents/{document_id}",
         response_model=ConversionResult,
         operation_id="getDocument",
+        summary="Get the full conversion result",
+        description=(
+            "Return the complete conversion result for a document, including its Markdown, "
+            "every chunk, and conversion metrics. Prefer searchDocument when you only need "
+            "the parts relevant to a question, because this returns the whole document."
+        ),
     )
     def get_document(document_id: str) -> ConversionResult:
         return _load_or_404(document_id)
@@ -244,6 +299,11 @@ def create_app() -> FastAPI:
         "/v1/documents/{document_id}/markdown",
         response_class=Response,
         operation_id="getDocumentMarkdown",
+        summary="Get the document as Markdown",
+        description=(
+            "Return the cleaned Markdown for a converted document as plain text. This is "
+            "the whole document; prefer searchDocument when you only need relevant sections."
+        ),
     )
     def get_document_markdown(document_id: str) -> Response:
         result = _load_or_404(document_id)
@@ -253,6 +313,12 @@ def create_app() -> FastAPI:
         "/v1/documents/{document_id}/chunks",
         response_model=ChunksResponse,
         operation_id="getDocumentChunks",
+        summary="Get all document chunks",
+        description=(
+            "Return every chunk of a converted document with its section path, page numbers "
+            "and token count. This is the whole document; prefer searchDocument when you "
+            "only need relevant sections."
+        ),
     )
     def get_document_chunks(document_id: str) -> ChunksResponse:
         result = _load_or_404(document_id)
@@ -262,10 +328,12 @@ def create_app() -> FastAPI:
         "/v1/documents/{document_id}/search",
         response_model=SearchResponse,
         operation_id="searchDocument",
-        summary="Search a converted document",
+        summary="Search within a document",
         description=(
-            "Return ranked, token-budgeted document chunks. The complete document "
-            "is never returned by this operation."
+            "Return the chunks of one document most relevant to a keyword or quoted-phrase "
+            "query, ranked and capped by a token budget. Use this instead of retrieving the "
+            "whole document when answering a question about it. Supports quoted phrases and "
+            "optional adjacent-chunk context."
         ),
     )
     def search_document_endpoint(
@@ -325,6 +393,11 @@ def create_app() -> FastAPI:
         "/v1/documents/{document_id}",
         status_code=204,
         operation_id="deleteDocument",
+        summary="Delete a document",
+        description=(
+            "Permanently remove a document, its stored files, its search index and any cached "
+            "copies. Cancels conversion if it is still running. This cannot be undone."
+        ),
     )
     def delete_document(document_id: str) -> Response:
         # Flag any still-running job for this document before touching the
