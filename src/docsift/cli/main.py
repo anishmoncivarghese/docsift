@@ -229,6 +229,45 @@ def serve(
     uvicorn.run("docsift.api.app:app", host=host, port=port, reload=reload)
 
 
+@app.command()
+def openapi(
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Write to this file instead of stdout."
+    ),
+    format: str = typer.Option(
+        "swagger2",
+        "--format",
+        help="openapi3 for the native document, swagger2 for Power Platform.",
+    ),
+) -> None:
+    """Print the API description. Power Platform connectors need swagger2."""
+    import json
+
+    if format not in ("openapi3", "swagger2"):
+        typer.secho("error: format must be openapi3 or swagger2", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    try:
+        from docsift.api.app import create_app
+        from docsift.api.swagger2 import to_swagger2
+    except ImportError as exc:
+        typer.secho(
+            "error: the API extra is not installed; install it with: pip install 'docsift[api]'",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    document = create_app().openapi()
+    if format == "swagger2":
+        document = to_swagger2(document)
+    text = json.dumps(document, indent=2)
+    if output is None:
+        typer.echo(text)
+    else:
+        output.write_text(text + "\n", encoding="utf-8")
+        typer.echo(f"wrote {output}")
+
+
 cache_app = typer.Typer(help="Inspect and clear the conversion cache.", no_args_is_help=True)
 app.add_typer(cache_app, name="cache")
 
