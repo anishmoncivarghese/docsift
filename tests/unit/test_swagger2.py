@@ -1,6 +1,10 @@
 import pytest
 
 pytest.importorskip("fastapi")
+# openapi_spec_validator is dev-only tooling (dependency-groups.dev), not part
+# of the markitdown/api extras -- skip rather than fail collection in an
+# environment that installs only those extras plus pytest.
+pytest.importorskip("openapi_spec_validator")
 
 from openapi_spec_validator import validate  # noqa: E402
 
