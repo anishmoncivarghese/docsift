@@ -1,4 +1,5 @@
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -8,6 +9,28 @@ pytest.importorskip("fastapi")
 
 EXAMPLES = Path(__file__).parent.parent.parent / "examples"
 PROJECT_ROOT = EXAMPLES.parent
+
+_N8N_EXPRESSION = re.compile(r"\{\{.*?\}\}")
+
+
+def _normalize_template(path: str) -> str:
+    """Collapse every `{name}` path parameter to a single placeholder."""
+    return re.sub(r"\{[^}]+\}", "{param}", path)
+
+
+def _normalize_called_url(url: str) -> str:
+    """Reduce an n8n node's URL expression to a route-template-shaped path.
+
+    Every `{{ ... }}` n8n expression -- the base URL and each dynamic path
+    segment (job_id, document_id) -- collapses to one `{param}` placeholder,
+    the same one route templates are normalized to. This must match the real
+    template *exactly*, not as a substring: a call to
+    `.../v1/documents/{{x}}/THIS-ROUTE-DOES-NOT-EXIST` or
+    `.../v1/documentsXYZ` should fail, even though both contain
+    `/v1/documents`.
+    """
+    normalized = _N8N_EXPRESSION.sub("{param}", url)
+    return normalized[normalized.index("/v1/") :]
 
 
 @pytest.fixture(autouse=True)
@@ -41,21 +64,35 @@ def test_n8n_workflow_calls_only_real_endpoints():
     workflow = json.loads(
         (EXAMPLES / "n8n" / "docsift-convert-and-search.json").read_text(encoding="utf-8")
     )
-    routes = _routes()
-    template_paths = {
-        path.replace("{document_id}", "").replace("{job_id}", "") for _, path in routes
-    }
-    called = [
-        node["parameters"]["url"]
-        for node in workflow["nodes"]
-        if node.get("type") == "n8n-nodes-base.httpRequest"
+    normalized_routes = {(method, _normalize_template(path)) for method, path in _routes()}
+    http_nodes = [
+        node for node in workflow["nodes"] if node.get("type") == "n8n-nodes-base.httpRequest"
     ]
-    assert called, "workflow must make HTTP calls"
-    for url in called:
-        tail = url.split("}}", 1)[-1]
-        assert any(
-            tail.startswith(prefix) or prefix.rstrip("/") in tail for prefix in template_paths
-        ), f"workflow calls an endpoint that does not exist: {tail}"
+    assert http_nodes, "workflow must make HTTP calls"
+    for node in http_nodes:
+        method = node["parameters"].get("method", "GET").upper()
+        url = node["parameters"]["url"]
+        called = (method, _normalize_called_url(url))
+        assert called in normalized_routes, (
+            f"workflow calls an endpoint that does not exist: {method} {url}"
+        )
+
+
+def test_n8n_url_matching_rejects_a_route_with_an_extra_path_segment():
+    normalized_routes = {(method, _normalize_template(path)) for method, path in _routes()}
+    called = (
+        "GET",
+        _normalize_called_url(
+            "={{ $json.baseUrl }}/v1/documents/{{ $json.id }}/THIS-ROUTE-DOES-NOT-EXIST"
+        ),
+    )
+    assert called not in normalized_routes
+
+
+def test_n8n_url_matching_rejects_a_similarly_prefixed_route():
+    normalized_routes = {(method, _normalize_template(path)) for method, path in _routes()}
+    called = ("GET", _normalize_called_url("={{ $json.baseUrl }}/v1/documentsXYZ"))
+    assert called not in normalized_routes
 
 
 def test_n8n_workflow_polls_before_searching():
