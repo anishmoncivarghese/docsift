@@ -45,7 +45,7 @@ document. Preserve that property in any change you make to error handling.
 
 The full list of behavioural limits — single-process constraints, buffering
 behaviour on uploads without `Content-Length`, deleted text lingering in
-unvacuumed SQLite pages — lives under **Known limitations** in the README. They
+unvacuumed SQLite pages — lives in [docs/LIMITATIONS.md](docs/LIMITATIONS.md). They
 are documented rather than hidden, and a report that simply restates one is not
 a vulnerability report.
 

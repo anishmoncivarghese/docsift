@@ -51,9 +51,9 @@ disappearing quietly — code fences split, headings dropped, repeated body line
 mistaken for page furniture. If you touch those paths, say in the pull request
 what you did to convince yourself nothing was lost.
 
-**Changes that reach the API surface stay documented.** The README's *Known
-limitations* section is deliberately blunt. If your change removes a limitation,
-delete the entry. If it adds one, add it — an honest limitation is worth more
+**Changes that reach the API surface stay documented.**
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md) is deliberately blunt. If your change
+removes a limitation, delete the entry. If it adds one, add it — an honest limitation is worth more
 than a quiet surprise.
 
 ## Commits
