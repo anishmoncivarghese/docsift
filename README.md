@@ -95,6 +95,29 @@ PDF, while the layout and table models run. That happens once; afterwards the
 file is recognised by its content and answers are immediate, even if you move or
 rename it.
 
+### 4. Check it works
+
+Before pointing it at a real PDF, prove the wiring with a file that converts
+instantly. Make one:
+
+    printf '# Test\n\nDocSift returns only the passages that match a question.\n' > /tmp/docsift-check.md
+
+Then ask your assistant:
+
+> search /tmp/docsift-check.md and tell me what DocSift returns
+
+You should get that one sentence back, having called `search_document`. This
+needs no PDF and no model weights, so a failure here is a setup problem — the
+command not on `PATH`, or the server not registered — and not a conversion one.
+
+Then try a real PDF of your own, and expect the first question to take a minute.
+
+One test worth running deliberately: **ask about something the document does not
+mention.** You should get nothing back rather than a plausible-sounding answer.
+Search is lexical, so a word that is not in the text matches nothing — and
+seeing that once tells you more about what you can trust than a dozen successful
+queries.
+
 ### What you get
 
 Two tools:
