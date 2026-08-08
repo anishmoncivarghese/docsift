@@ -90,8 +90,10 @@ No commands to learn — describe what you want:
 
 > what does report.pdf say about Q3 revenue?
 
-The first question about a new file converts it, which takes a moment on a long
-PDF; after that it is cached and answers are immediate.
+The first question about a new file converts it — a minute or two for a long
+PDF, while the layout and table models run. That happens once; afterwards the
+file is recognised by its content and answers are immediate, even if you move or
+rename it.
 
 ### What you get
 
@@ -103,10 +105,17 @@ Two tools:
 - **`convert_document`** — converts and indexes a file, returning a summary
   (page count, token estimate, chunk count) rather than the text.
 
-For a sense of scale: a 9-page technical PDF is about **8,000 tokens** in full.
-Asking it a question through `search_document` returns the five relevant
-passages — about **1,600 tokens**. That gap is the entire point, and it widens
-with document length.
+For a sense of scale: a 34-page economic report runs to **21,000 tokens** in
+full. Asking it "what does this say about inflation?" returns the five relevant
+passages — about **4,000 tokens**, with the pages to cite. That gap is the
+entire point, and it widens with document length.
+
+`search_document` takes `limit` and `max_tokens` as well, and a model will set
+them when you ask for more or less. The defaults return five passages within a
+5,000-token budget. Dense documents produce large chunks — around 1,000 tokens
+each in the report above — so if answers feel truncated, a larger `max_tokens`
+is the dial, and it is cheaper than the model asking the same question several
+times over.
 
 Everything happens in that process, on your machine. Nothing listens on a port
 and no document content crosses the network. The server has exactly the
