@@ -105,6 +105,28 @@ def test_unexpected_failures_never_surface_document_content(sample, monkeypatch)
     assert "RuntimeError" in str(caught.value)
 
 
+def test_defaults_match_the_cli_so_the_two_surfaces_agree():
+    """A tighter budget here than the CLI starves the tool.
+
+    Chunks routinely reach ~1,000 tokens, so a 2,000-token budget returns one
+    chunk and the model has to call the tool again for every further fragment.
+    That drift shipped once; this locks the two surfaces together.
+    """
+    import inspect
+
+    from docsift.cli.main import search as cli_search
+
+    cli_defaults = {
+        name: param.default.default
+        for name, param in inspect.signature(cli_search).parameters.items()
+        if hasattr(param.default, "default")
+    }
+
+    assert mcp_server.DEFAULT_LIMIT == cli_defaults["limit"]
+    assert mcp_server.DEFAULT_MAX_TOKENS == cli_defaults["max_tokens"]
+    assert mcp_server.DEFAULT_CONTEXT == cli_defaults["context"]
+
+
 def test_tool_descriptions_steer_an_agent_towards_search():
     assert "search_document" in mcp_server.CONVERT_DESCRIPTION
     assert "context window" in mcp_server.SEARCH_DESCRIPTION

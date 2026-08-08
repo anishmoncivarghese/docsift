@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 — 2026-08-09
+
+- **Fixed: the MCP server's default token budget was a third of the CLI's**, so
+  `search_document` returned a single chunk per call. Chunks routinely reach
+  ~1,000 tokens and the budget was 2,000, which left no room for a second one.
+  In practice one question against a 34-page report cost six tool calls, each
+  handing back one fragment — spending more tokens in total than the wider
+  budget would have. The default is now 5,000, matching `docsift search`, and a
+  test holds the two surfaces together.
+
 ## 0.5.0 — 2026-08-09
 
 - New `docsift mcp` runs DocSift as a local [MCP](https://modelcontextprotocol.io)

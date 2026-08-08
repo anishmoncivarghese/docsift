@@ -15,9 +15,15 @@ from typing import Any
 from docsift import __version__
 from docsift.core.exceptions import DocSiftError
 
-# Kept in sync with the CLI's own defaults so the two surfaces agree.
+# These must match the `docsift search` CLI defaults, and a test enforces it.
+#
+# The budget is not a nicety: chunks routinely run to ~1,000 tokens, so a 2,000
+# budget returns a *single* chunk and the caller has to ask again for each
+# further fragment. Observed in practice -- one question against a 34-page
+# report cost six tool calls, each returning one chunk, which spends more
+# tokens in aggregate than the wider budget it was trying to save.
 DEFAULT_LIMIT = 5
-DEFAULT_MAX_TOKENS = 2000
+DEFAULT_MAX_TOKENS = 5000
 DEFAULT_CONTEXT = 0
 
 
