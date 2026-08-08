@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-08-09
 
 - New `docsift mcp` runs DocSift as a local [MCP](https://modelcontextprotocol.io)
   server over stdio, for Claude Desktop, Claude Code, Codex, Cursor and other MCP
