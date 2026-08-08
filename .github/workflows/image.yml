@@ -36,6 +36,45 @@ jobs:
       - name: Build
         run: docker build -t "${{ secrets.ACR_LOGIN_SERVER }}/docsift:${{ inputs.tag }}" .
 
+      # Runs before the push so a broken image never reaches the registry. The
+      # test suite exercises the library and the API, but nothing exercised the
+      # *image* -- which is how a container that could not convert a single PDF
+      # got built and deployed. Converting a real PDF is the only check that
+      # covers the engine's native dependencies.
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/docsift:${{ inputs.tag }}"
+          docker run -d --name smoke -p 8000:8000 "$IMAGE"
+          trap 'docker logs smoke' EXIT
+
+          for _ in $(seq 1 30); do
+            curl -sf localhost:8000/health >/dev/null && break
+            sleep 2
+          done
+          curl -sf localhost:8000/health
+
+          job=$(curl -sf -F "file=@tests/fixtures/multipage.pdf" \
+                  localhost:8000/v1/documents \
+                | python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])')
+
+          for _ in $(seq 1 60); do
+            body=$(curl -sf "localhost:8000/v1/jobs/$job")
+            status=$(printf '%s' "$body" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+            case "$status" in
+              succeeded) break ;;
+              failed) echo "conversion failed: $body"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          [ "$status" = succeeded ] || { echo "timed out in state: $status"; exit 1; }
+
+          # A PDF that converts but yields nothing has not really converted.
+          curl -sf "localhost:8000/v1/documents/$(printf '%s' "$body" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["document_id"])')/markdown" \
+            | head -c 200
+
       - name: Push
         run: docker push "${{ secrets.ACR_LOGIN_SERVER }}/docsift:${{ inputs.tag }}"
 

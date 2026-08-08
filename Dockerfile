@@ -6,6 +6,19 @@ FROM python:3.12-slim
 # uv.lock's revision -- an older uv rejects the lockfile outright under --locked.
 COPY --from=ghcr.io/astral-sh/uv:0.11.2 /uv /usr/local/bin/uv
 
+# Docling's OCR engine is RapidOCR, which pulls in opencv-python -- the full
+# build, not the headless one -- and that links libGL and GLib. python:3.12-slim
+# ships neither, so `import cv2` raises ImportError, Docling reports "No OCR
+# engine found. Please review the install details.", and every PDF conversion
+# fails. libgomp is onnxruntime's OpenMP runtime, needed on the same path.
+# Debian renamed libglib2.0-0 to libglib2.0-0t64 in trixie; accept either so
+# this does not break on a base image bump.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libgomp1 \
+    && (apt-get install -y --no-install-recommends libglib2.0-0t64 \
+        || apt-get install -y --no-install-recommends libglib2.0-0) \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 
