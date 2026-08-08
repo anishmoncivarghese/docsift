@@ -230,6 +230,31 @@ def serve(
 
 
 @app.command()
+def mcp() -> None:
+    """Run DocSift as a local MCP server, speaking over stdin/stdout.
+
+    For Claude Desktop, Claude Code, Codex, Cursor and other MCP clients.
+    Documents are converted in this process and never leave the machine.
+    """
+    from docsift.mcp_server import run_stdio, sdk_available
+
+    # Importing docsift.mcp_server succeeds without the SDK -- it is imported
+    # lazily inside the server build -- so ask explicitly rather than letting an
+    # ImportError traceback surface from deep inside the start.
+    if not sdk_available():
+        typer.secho(
+            "error: the MCP extra is not installed; install it with: pip install 'docsift[mcp]'",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Nothing may be written to stdout here: it is the protocol channel, and a
+    # stray banner or progress line corrupts the session.
+    run_stdio()
+
+
+@app.command()
 def openapi(
     output: Path | None = typer.Option(
         None, "--output", "-o", help="Write to this file instead of stdout."

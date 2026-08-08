@@ -1,5 +1,4 @@
 import contextlib
-import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -9,7 +8,7 @@ from docsift.core.config import get_settings
 from docsift.core.exceptions import DocSiftError, ServiceUnavailableError
 from docsift.core.models import JobRecord
 from docsift.core.options import ConversionOptions
-from docsift.storage import cache, database, documents
+from docsift.storage import cache, database
 
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
@@ -81,17 +80,16 @@ def shutdown() -> None:
 
 
 def _document_id_for(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return f"doc_{digest.hexdigest()[:12]}"
+    from docsift.services.ingest_service import document_id_for_file
+
+    return document_id_for_file(path)
 
 
 def _run(
     job_id: str, source_path: Path, filename: str, engine: str, options: ConversionOptions
 ) -> None:
     from docsift.services.conversion_service import convert_document
+    from docsift.services.ingest_service import store_and_index
 
     database.set_job_status(job_id, "processing")
     try:
@@ -116,21 +114,8 @@ def _run(
         # there's no path risk in using it as-is.
         result = result.model_copy(deep=True)
         result.source.filename = filename
-        result_path = documents.store_result(result)
-        # Search is part of the completed-document contract from Milestone 5.
-        # Replace the index before publishing the document row or marking the
-        # job succeeded, so callers never observe a successful-but-unsearchable
-        # conversion. The index operation is atomic per document.
-        database.index_document_chunks(result.document_id, result.chunks)
-        database.save_document(
-            document_id=result.document_id,
-            filename=result.source.filename,
-            media_type=result.source.media_type,
-            size_bytes=result.source.size_bytes,
-            sha256=result.source.sha256,
-            engine=result.conversion.engine,
-            result_path=str(result_path),
-        )
+        # Ordering guarantee (index before document row) lives in store_and_index.
+        store_and_index(result)
         database.set_job_status(job_id, "succeeded", document_id=result.document_id)
     except DocSiftError as exc:
         # DocSift's own errors are content-safe by construction, but

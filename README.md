@@ -77,6 +77,48 @@ The search index belongs to `DOCSIFT_DATA_DIR` and is populated by successful
 API conversion jobs. `docsift convert`, which writes standalone files to an
 output directory, does not add those files to the service's document store.
 
+## Use it from Claude, Codex, or another MCP client
+
+DocSift can run as a local [MCP](https://modelcontextprotocol.io) server, so an
+assistant can search your documents without you pasting them in:
+
+    pip install "docsift[mcp,docling,markitdown]"
+
+Register it with Claude Code:
+
+    claude mcp add docsift -- docsift mcp
+
+Or add it to a client's config file (Claude Desktop, Codex, Cursor and others
+use this shape):
+
+```json
+{
+  "mcpServers": {
+    "docsift": {
+      "command": "docsift",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+If the client cannot find it, use the absolute path to the `docsift`
+executable — MCP clients do not always inherit your shell's `PATH`. `which
+docsift` will tell you.
+
+Two tools are exposed:
+
+- **`search_document`** — the one that matters. Give it a file path and a
+  question; it converts the file the first time it sees it, then returns only
+  the passages that match, with page numbers and section headings. This is what
+  keeps a 300-page PDF out of the context window.
+- **`convert_document`** — converts and indexes a file, returning a summary
+  (page count, token estimate, chunk count) rather than the text.
+
+Everything runs in that process on your machine. There is no server, nothing
+listens on a port, and no document content crosses the network. The server has
+exactly the filesystem access of the user who started it.
+
 ## HTTP API
 
     pip install "docsift[all]"   # api extra alone pulls no conversion engine -- see Install

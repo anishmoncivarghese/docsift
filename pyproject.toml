@@ -25,7 +25,8 @@ classifiers = [
 markitdown = ["markitdown[docx,pptx,xlsx,pdf]>=0.1.1"]
 docling = ["docling>=2.0"]
 api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9"]
-all = ["docsift[markitdown]", "docsift[docling]", "docsift[api]"]
+mcp = ["mcp>=2.0"]
+all = ["docsift[markitdown]", "docsift[docling]", "docsift[api]", "docsift[mcp]"]
 
 [project.scripts]
 docsift = "docsift.cli.main:app"

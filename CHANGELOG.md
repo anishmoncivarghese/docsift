@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- New `docsift mcp` runs DocSift as a local [MCP](https://modelcontextprotocol.io)
+  server over stdio, for Claude Desktop, Claude Code, Codex, Cursor and other MCP
+  clients. Install it with the new `mcp` extra.
+
+  Two tools: `search_document` takes a file path and a question and returns only
+  the matching passages with page and section metadata, converting the file the
+  first time it is seen; `convert_document` converts and indexes a file and
+  returns a summary rather than its text. Neither returns a whole document —
+  that would put it in the model's context and undo the point.
+
+  The server runs in your own process. Nothing listens on a port and no document
+  content crosses the network.
+
 ## 0.4.0 — 2026-08-06
 
 Makes DocSift usable from Copilot Studio, Power Automate and n8n.
