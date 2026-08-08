@@ -33,37 +33,90 @@ conversion will tell you so rather than failing obscurely.
 The shortest path to the point of this tool: let an assistant search your own
 documents, without pasting them anywhere.
 
-    pip install "docsift[mcp,docling,markitdown]"
-    claude mcp add docsift -- docsift mcp
+### 1. Install it as a command, not into a project
 
-For Claude Desktop, Codex, Cursor and others, add it to the client's config:
+An MCP client starts DocSift as a program, so it has to exist outside any
+virtualenv. Install it as a standalone tool:
+
+    uv tool install --python 3.12 "docsift[mcp,docling,markitdown]"
+
+or with pipx:
+
+    pipx install --python python3.12 "docsift[mcp,docling,markitdown]"
+
+DocSift needs **Python 3.11 or newer**. If your default is older, the version
+flag above is what avoids an unsatisfiable-requirements error. Expect a large
+download: `docling` brings PyTorch and layout models.
+
+Check it landed, and note the path — you will need it:
+
+    docsift --version
+    which docsift          # e.g. /Users/you/.local/bin/docsift
+
+### 2. Register it with your client
+
+Claude Code:
+
+    claude mcp add --scope user docsift -- /Users/you/.local/bin/docsift mcp
+    claude mcp list        # should report: docsift ... ✔ Connected
+
+`--scope user` makes it available in every project; without it, the server is
+registered only for the directory you were in.
+
+Claude Desktop, Codex, Cursor and others take a config file — for Claude Desktop
+that is `~/Library/Application Support/Claude/claude_desktop_config.json` on
+macOS. Add `docsift` alongside anything already there, then restart the app:
 
 ```json
 {
   "mcpServers": {
     "docsift": {
-      "command": "docsift",
+      "command": "/Users/you/.local/bin/docsift",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-If the client cannot find it, use the absolute path from `which docsift` — MCP
-clients do not always inherit your shell's `PATH`.
+**Use the absolute path from `which docsift`, not a bare `docsift`.** MCP
+clients do not reliably inherit your shell's `PATH`, and this is the most common
+reason a local server silently fails to start.
 
-Two tools are exposed:
+### 3. Ask
+
+No commands to learn — describe what you want:
+
+> search ~/Documents/contract.pdf for the termination clause
+
+> what does report.pdf say about Q3 revenue?
+
+The first question about a new file converts it, which takes a moment on a long
+PDF; after that it is cached and answers are immediate.
+
+### What you get
+
+Two tools:
 
 - **`search_document`** — the one that matters. Give it a file path and a
   question; it converts the file the first time it sees it, then returns only
-  the passages that match. This is what keeps a long PDF out of the context
-  window.
+  the passages that match, with page numbers and section headings.
 - **`convert_document`** — converts and indexes a file, returning a summary
   (page count, token estimate, chunk count) rather than the text.
+
+For a sense of scale: a 9-page technical PDF is about **8,000 tokens** in full.
+Asking it a question through `search_document` returns the five relevant
+passages — about **1,600 tokens**. That gap is the entire point, and it widens
+with document length.
 
 Everything happens in that process, on your machine. Nothing listens on a port
 and no document content crosses the network. The server has exactly the
 filesystem access of the user who started it.
+
+> **Not in the claude.ai connector directory, and it cannot be.** claude.ai runs
+> in the cloud and cannot start a program on your computer. A local MCP server
+> works in apps running on your own machine — Claude Code, Claude Desktop, Codex,
+> Cursor — and searching the web app's connector list for DocSift will never find
+> it.
 
 ## Command line
 
