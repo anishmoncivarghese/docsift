@@ -268,6 +268,17 @@ as a volume.
 | `DOCSIFT_API_KEY` | unset | Optional shared secret required as `X-API-Key` on `/v1/*` routes. |
 | `DOCSIFT_PUBLIC_URL` | `http://127.0.0.1:8000` | Reachable base URL advertised in OpenAPI and Swagger connector documents. |
 
+## Privacy, security and contributing
+
+DocSift is software you run, not a service. It has no telemetry and never
+transmits document content anywhere — [PRIVACY.md](PRIVACY.md) covers what it
+writes to disk, when it touches the network, and what changes if you host it for
+other people.
+
+To report a vulnerability, or to understand what the service does and does not
+defend against, see [SECURITY.md](SECURITY.md). To work on DocSift, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 MIT
