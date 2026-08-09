@@ -145,15 +145,25 @@ instantly. Make one:
 
     printf '# Test\n\nDocSift returns only the passages that match a question.\n' > /tmp/docsift-check.md
 
-Then ask your assistant:
+Then ask your assistant, naming the tool:
 
-> search /tmp/docsift-check.md and tell me what DocSift returns
+> use the docsift search_document tool on /tmp/docsift-check.md to search for
+> "passages"
 
-You should get that one sentence back, having called `search_document`. This
-needs no PDF and no model weights, so a failure here is a setup problem — the
-command not on `PATH`, or the server not registered — and not a conversion one.
+**Name it explicitly, and watch which tool actually runs.** Asked casually, an
+assistant will often just open a small file with its own file-reading tool and
+answer from that — you get the right answer having never touched DocSift, which
+makes a broken setup look like a working one. If your assistant reports reading
+a file rather than calling `docsift`, the check has told you nothing.
+
+Success looks like a `docsift` tool call in the transcript, returning that one
+sentence. This needs no PDF and no model weights, so a failure here is a setup
+problem — the command not on `PATH`, or the server not registered — and not a
+conversion one.
 
 Then try a real PDF of your own, and expect the first question to take a minute.
+On a document of that size the choice takes care of itself: reading it whole is
+expensive, which is when searching it becomes the obvious move.
 
 One test worth running deliberately: **ask about something the document does not
 mention.** You should get nothing back rather than a plausible-sounding answer.
