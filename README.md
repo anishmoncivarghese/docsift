@@ -61,8 +61,11 @@ executable, which the next step needs.
 
 ### 2. Register it with your client
 
-For Claude Code, `$(which docsift)` fills in the path for you, so this works as
-written:
+**Pick the one you use. You only need one of these.**
+
+#### Claude Code
+
+`$(which docsift)` fills in the path for you, so this works exactly as written:
 
     claude mcp add --scope user docsift -- "$(which docsift)" mcp
 
@@ -73,13 +76,16 @@ Then confirm it started — look for `docsift ... ✔ Connected`:
 `--scope user` makes it available in every project; without it, the server is
 registered only for the directory you were in.
 
-Claude Desktop, Codex, Cursor and others take a config file — for Claude Desktop
-that is `~/Library/Application Support/Claude/claude_desktop_config.json` on
-macOS. Add `docsift` alongside anything already there, then restart the app.
+**That is the whole setup for Claude Code.** Skip the next part and go to step 3.
 
-**Replace the command below with the exact path `which docsift` printed.** A
-config file cannot work it out for itself, and a wrong path fails with
-`ENOENT: no such file or directory`:
+#### Claude Desktop, Codex, Cursor
+
+These read a JSON config file instead. For Claude Desktop on macOS that is
+`~/Library/Application Support/Claude/claude_desktop_config.json`; create it if
+it does not exist.
+
+If the file is empty or new, this is the whole contents — replacing the command
+with the path `which docsift` printed in step 1:
 
 ```json
 {
@@ -91,6 +97,29 @@ config file cannot work it out for itself, and a wrong path fails with
   }
 }
 ```
+
+If it already has other servers, add `docsift` beside them rather than replacing
+the file — note the comma after the previous entry:
+
+```json
+{
+  "mcpServers": {
+    "something-you-already-had": {
+      "command": "..."
+    },
+    "docsift": {
+      "command": "/replace/with/the/path/from/which/docsift",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Use the absolute path, not a bare `docsift`. These clients do not reliably
+inherit your shell's `PATH`, and a wrong or bare path fails with `ENOENT: no
+such file or directory`.
+
+Then **restart the app** — the config is read at startup.
 
 **Use the absolute path from `which docsift`, not a bare `docsift`.** MCP
 clients do not reliably inherit your shell's `PATH`, and this is the most common
