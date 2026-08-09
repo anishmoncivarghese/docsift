@@ -66,7 +66,9 @@ def test_convert_unsupported_file_exits_nonzero(tmp_path):
 def test_unexpected_error_prints_type_only(monkeypatch, tmp_path):
     import docsift.services.conversion_service as svc
 
-    def explode(path, engine="auto", output_dir=None, options=None, use_cache=True):
+    def explode(
+        path, engine="auto", output_dir=None, options=None, use_cache=True, on_progress=None
+    ):
         raise PermissionError("secret path details")
 
     monkeypatch.setattr(svc, "convert_document", explode)

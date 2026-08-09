@@ -8,6 +8,9 @@ license = { text = "MIT" }
 authors = [{ name = "Anish Monci Varghese" }]
 dependencies = [
   "typer>=0.12",
+  # Direct, not transitive: typer bundles rich today, but the CLI's progress
+  # renderer depends on it explicitly and should say so.
+  "rich>=13",
   "pydantic>=2.7",
   "tiktoken>=0.8",
 ]

@@ -52,6 +52,7 @@ def convert(
     no_cache: bool = typer.Option(
         False, "--no-cache", help="Convert even if a cached result exists."
     ),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output on stderr."),
 ) -> None:
     """Convert a document to clean Markdown plus a normalized JSON result."""
     from docsift.core.exceptions import DocSiftError
@@ -67,10 +68,18 @@ def convert(
         chunk=ChunkOptions(max_tokens=max_tokens, overlap_tokens=overlap),
     )
 
+    from docsift.cli.progress import progress_reporter
+
     try:
-        result = convert_document(
-            path, engine=engine, output_dir=output, options=options, use_cache=not no_cache
-        )
+        with progress_reporter(enabled=not quiet) as on_progress:
+            result = convert_document(
+                path,
+                engine=engine,
+                output_dir=output,
+                options=options,
+                use_cache=not no_cache,
+                on_progress=on_progress,
+            )
     except DocSiftError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
