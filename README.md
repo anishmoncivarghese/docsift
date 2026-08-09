@@ -194,10 +194,23 @@ Two tools:
 - **`convert_document`** — converts and indexes a file, returning a summary
   (page count, token estimate, chunk count) rather than the text.
 
-For a sense of scale: a 34-page economic report runs to **21,000 tokens** in
-full. Asking it "what does this say about inflation?" returns the five relevant
-passages — about **4,000 tokens**, with the pages to cite. That gap is the
-entire point, and it widens with document length.
+### What to expect
+
+Measured on an Apple-silicon MacBook Air with a 34-page, 1.7 MB PDF — a
+BusinessEurope economic outlook, chosen because it is the awkward kind of
+document this tool exists for: dense tables, footnotes, multi-column stretches.
+
+| | |
+|---|---|
+| Whole document | ~21,000 tokens, 42 chunks |
+| One question answered | ~4,000 tokens, 5 passages, with pages to cite |
+| First question (conversion) | ~3 minutes |
+| Every question after | immediate |
+
+The token gap is the point, and it widens with document length. The three
+minutes is the honest price of Docling's layout and table models, paid once per
+document — [convert it ahead of time](#3-ask) if you would rather not wait
+inside a conversation.
 
 `search_document` takes `limit` and `max_tokens` as well, and a model will set
 them when you ask for more or less. The defaults return five passages within a
@@ -205,6 +218,13 @@ them when you ask for more or less. The defaults return five passages within a
 each in the report above — so if answers feel truncated, a larger `max_tokens`
 is the dial, and it is cheaper than the model asking the same question several
 times over.
+
+One caveat the numbers do not show: **search matches words, not meaning.**
+Asking that report about "energy prices" surfaced a section on shipping and
+fertiliser costs because those passages happen to contain the phrase. A question
+worded "why did transport costs rise?" might have missed it. Choose words that
+would literally appear in the text — and see
+[Known limitations](https://github.com/anishmoncivarghese/docsift/blob/main/docs/LIMITATIONS.md).
 
 Everything happens in that process, on your machine. Nothing listens on a port
 and no document content crosses the network. The server has exactly the
