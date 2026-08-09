@@ -16,6 +16,7 @@ from docsift.core.models import (
     SourceMetadata,
 )
 from docsift.core.options import ConversionOptions
+from docsift.core.progress import ProgressCallback, emit
 from docsift.engines.registry import get_engine
 from docsift.engines.router import SUPPORTED_SUFFIXES, select_engine_name
 from docsift.processing.chunker import chunk_markdown
@@ -101,6 +102,7 @@ def convert_document(
     output_dir: Path | None = None,
     options: ConversionOptions | None = None,
     use_cache: bool = True,
+    on_progress: ProgressCallback | None = None,
 ) -> ConversionResult:
     options = options or ConversionOptions()
     path = Path(path)
@@ -110,6 +112,7 @@ def convert_document(
     source = build_source_metadata(path)
 
     key = cache_key(source.sha256, engine_name, engine_impl.version(), __version__, options)
+    emit(on_progress, "cache_check", "checking cache")
     if use_cache:
         cached = load_cached(key)
         if cached is not None:
@@ -124,12 +127,13 @@ def convert_document(
             # value — it describes how long the actual conversion took.
             cached.source = source
             cached.conversion.selection_reason = reason
+            emit(on_progress, "write", "writing output")
             _write_artifacts(cached, path, output_dir)
             return cached
 
     started = datetime.now(UTC)
     try:
-        output = engine_impl.convert(path, options)
+        output = engine_impl.convert(path, options, on_progress=on_progress)
     except DocSiftError:
         raise
     except Exception as exc:  # engine bugs must surface as structured errors
@@ -144,6 +148,7 @@ def convert_document(
     markdown, clean_stats = clean_markdown(raw_markdown, options.clean, plan=clean_plan)
     document_id = f"doc_{source.sha256[:12]}"
 
+    emit(on_progress, "chunk", "chunking")
     if output.chunks is not None:
         # Engine-supplied chunks are built from the engine's own structured
         # document and never pass through the document-level cleaner, so apply
@@ -230,5 +235,6 @@ def convert_document(
 
     if use_cache:
         store_cached(key, result)
+    emit(on_progress, "write", "writing output")
     _write_artifacts(result, path, output_dir)
     return result

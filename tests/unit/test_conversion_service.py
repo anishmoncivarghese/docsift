@@ -345,3 +345,33 @@ def test_no_overlap_warning_when_overlap_is_zero(stub_engine, text_file):
         unregister_engine("markitdown")
         register_engine("markitdown", StubEngine)
     assert not any(w.code == "overlap_not_supported" for w in result.warnings)
+
+
+def test_convert_document_reports_phases(tmp_path):
+    from docsift.services.conversion_service import convert_document
+
+    source = tmp_path / "note.csv"
+    source.write_text("name,role\nada,engineer\n", encoding="utf-8")
+
+    seen = []
+    convert_document(source, output_dir=tmp_path / "out", use_cache=False, on_progress=seen.append)
+    phases = [event.phase for event in seen]
+
+    assert phases[0] == "cache_check"
+    assert "chunk" in phases
+    assert phases[-1] == "write"
+
+
+def test_convert_document_survives_a_broken_callback(tmp_path):
+    from docsift.services.conversion_service import convert_document
+
+    source = tmp_path / "note.csv"
+    source.write_text("name,role\nada,engineer\n", encoding="utf-8")
+
+    def explode(event):
+        raise RuntimeError("renderer is broken")
+
+    result = convert_document(
+        source, output_dir=tmp_path / "out", use_cache=False, on_progress=explode
+    )
+    assert result.document_id
