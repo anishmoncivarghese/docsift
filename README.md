@@ -133,10 +133,19 @@ No commands to learn — describe what you want:
 
 > what does report.pdf say about Q3 revenue?
 
-The first question about a new file converts it — a minute or two for a long
-PDF, while the layout and table models run. That happens once; afterwards the
-file is recognised by its content and answers are immediate, even if you move or
-rename it.
+The first question about a new file converts it, and on a PDF that is slow: a
+34-page report takes about three minutes while the layout and table models run.
+It happens once. Afterwards the file is recognised by its content and answers
+come back immediately, even if you move or rename it.
+
+**For a long PDF, convert it first and ask afterwards:**
+
+    docsift convert big-report.pdf
+
+That fills the same cache the MCP server reads, so the first question is as fast
+as the rest. It also sidesteps a real limit — MCP clients apply their own
+timeouts to a tool call, and a long enough conversion can exceed one and surface
+as an error even though it would have finished.
 
 ### 4. Check it works
 
