@@ -1,3 +1,5 @@
+import dataclasses
+
 import pytest
 
 from docsift.core.progress import ProgressEvent, emit
@@ -22,5 +24,5 @@ def test_emit_swallows_callback_exceptions():
 
 def test_progress_event_is_frozen():
     event = ProgressEvent(phase="convert", message="x")
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         event.phase = "other"

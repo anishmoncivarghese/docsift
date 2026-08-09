@@ -4,6 +4,7 @@ from typing import ClassVar
 
 from docsift.core.models import EngineOutput
 from docsift.core.options import ConversionOptions
+from docsift.core.progress import ProgressCallback
 
 
 class ConversionEngine(ABC):
@@ -22,5 +23,14 @@ class ConversionEngine(ABC):
         return "unknown"
 
     @abstractmethod
-    def convert(self, path: Path, options: ConversionOptions | None = None) -> EngineOutput:
-        """Convert the file at `path`. Raises on failure; never returns None."""
+    def convert(
+        self,
+        path: Path,
+        options: ConversionOptions | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> EngineOutput:
+        """Convert the file at `path`. Raises on failure; never returns None.
+
+        `on_progress` is optional and advisory: implementations report phases
+        through `docsift.core.progress.emit`, which ignores a None callback.
+        """

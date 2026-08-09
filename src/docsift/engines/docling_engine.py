@@ -4,6 +4,7 @@ from pathlib import Path
 from docsift.core.exceptions import ConversionFailedError
 from docsift.core.models import Chunk, ConversionWarning, EngineOutput
 from docsift.core.options import ChunkOptions, ConversionOptions
+from docsift.core.progress import ProgressCallback
 from docsift.engines.base import ConversionEngine
 
 
@@ -27,7 +28,12 @@ class DoclingEngine(ConversionEngine):
             return "unknown"
         return metadata.version("docling")
 
-    def convert(self, path: Path, options: ConversionOptions | None = None) -> EngineOutput:
+    def convert(
+        self,
+        path: Path,
+        options: ConversionOptions | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> EngineOutput:
         from docling.document_converter import DocumentConverter
 
         chunk_options = options.chunk if options else ChunkOptions()

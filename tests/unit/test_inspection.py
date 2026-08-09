@@ -24,7 +24,7 @@ class AvailableEngine(ConversionEngine):
     def version(cls) -> str:
         return "9.9.9"
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         raise AssertionError("inspect must never convert")
 
 

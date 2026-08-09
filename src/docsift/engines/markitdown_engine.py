@@ -4,6 +4,7 @@ from pathlib import Path
 from docsift.core.exceptions import ConversionFailedError
 from docsift.core.models import EngineOutput
 from docsift.core.options import ConversionOptions
+from docsift.core.progress import ProgressCallback, emit
 from docsift.engines.base import ConversionEngine
 
 
@@ -22,9 +23,16 @@ class MarkItDownEngine(ConversionEngine):
             return "unknown"
         return metadata.version("markitdown")
 
-    def convert(self, path: Path, options: ConversionOptions | None = None) -> EngineOutput:
+    def convert(
+        self,
+        path: Path,
+        options: ConversionOptions | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> EngineOutput:
+        emit(on_progress, "engine_load", "loading markitdown")
         from markitdown import MarkItDown
 
+        emit(on_progress, "convert", f"converting {path.name}")
         try:
             result = MarkItDown().convert(str(path))
         except Exception as exc:

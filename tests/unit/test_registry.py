@@ -15,7 +15,7 @@ class FakeEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         return EngineOutput(markdown="# fake", engine_version="0.0.1")
 
 

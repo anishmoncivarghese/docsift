@@ -23,7 +23,7 @@ class OkEngine(ConversionEngine):
     def version(cls) -> str:
         return "9.9.9"
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         return EngineOutput(markdown="# Api\n\nBody paragraph text.\n", engine_version="9.9.9")
 
 
@@ -278,7 +278,7 @@ def test_failed_job_still_carries_document_id(client):
         def version(cls) -> str:
             return "9.9.9"
 
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             raise RuntimeError("boom")
 
     register_engine("markitdown", FailingEngine)
@@ -346,7 +346,7 @@ def test_delete_during_conversion_is_not_undone(tmp_path, monkeypatch):
         def version(cls) -> str:
             return "9.9.9"
 
-        def convert(self, path, options=None) -> EngineOutput:
+        def convert(self, path, options=None, on_progress=None) -> EngineOutput:
             release.wait(timeout=30)
             return EngineOutput(
                 markdown="# Secret\n\nCONFIDENTIAL-XYZ body text.\n",

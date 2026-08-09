@@ -22,7 +22,7 @@ class OkEngine(ConversionEngine):
     def version(cls) -> str:
         return "9.9.9"
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         return EngineOutput(markdown="# Doc\n\nBody.\n", engine_version="9.9.9")
 
 

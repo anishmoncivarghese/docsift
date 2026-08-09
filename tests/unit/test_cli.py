@@ -20,7 +20,7 @@ class StubEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         return EngineOutput(markdown="# Stubbed", engine_version="9.9.9")
 
 
@@ -89,13 +89,13 @@ def test_compare_reports_both_engines_and_exits_zero(tmp_path):
         def is_available(cls) -> bool:
             return True
 
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             return EngineOutput(markdown="# Hi", engine_version="1.0")
 
     class FailEngine(OkEngine):
         name = "docling"
 
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             raise ConversionFailedError("docling failed on 'note.txt': BoomError")
 
     register_engine("markitdown", OkEngine)
@@ -136,7 +136,7 @@ def test_convert_prints_overlap_not_supported_warning(tmp_path, monkeypatch):
         def is_available(cls) -> bool:
             return True
 
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             from docsift.core.models import Chunk
 
             return EngineOutput(
@@ -181,7 +181,7 @@ def test_compare_exits_one_when_all_engines_fail(tmp_path):
         def is_available(cls) -> bool:
             return True
 
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             raise ConversionFailedError("nope")
 
     class FailEngine2(FailEngine):

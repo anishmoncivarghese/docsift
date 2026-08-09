@@ -51,3 +51,21 @@ def test_wrapper_strips_injected_exception_text(monkeypatch, tmp_path):
     message = str(excinfo.value)
     assert "secret document content" not in message
     assert "ValueError" in message
+
+
+def test_markitdown_reports_progress_phases(tmp_path):
+    source = tmp_path / "note.csv"
+    source.write_text("name,role\nada,engineer\n", encoding="utf-8")
+
+    seen = []
+    MarkItDownEngine().convert(source, on_progress=seen.append)
+
+    assert [event.phase for event in seen] == ["engine_load", "convert"]
+    assert "note.csv" in seen[-1].message
+
+
+def test_markitdown_converts_without_a_callback(tmp_path):
+    source = tmp_path / "note.csv"
+    source.write_text("name,role\nada,engineer\n", encoding="utf-8")
+
+    assert MarkItDownEngine().convert(source).markdown

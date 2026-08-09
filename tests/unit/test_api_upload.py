@@ -23,7 +23,7 @@ class OkEngine(ConversionEngine):
     def version(cls) -> str:
         return "9.9.9"
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         return EngineOutput(markdown="# Api\n\nBody text.\n", engine_version="9.9.9")
 
 
@@ -230,7 +230,7 @@ def test_pending_job_backlog_over_the_ceiling_returns_503(client, monkeypatch):
         def version(cls) -> str:
             return "9.9.9"
 
-        def convert(self, path, options=None) -> EngineOutput:
+        def convert(self, path, options=None, on_progress=None) -> EngineOutput:
             release.wait(timeout=30)
             return EngineOutput(markdown="# Gated\n\nBody.\n", engine_version="9.9.9")
 

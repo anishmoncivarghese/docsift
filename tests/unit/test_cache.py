@@ -18,7 +18,7 @@ class CountingEngine(ConversionEngine):
     def is_available(cls) -> bool:
         return True
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         type(self).calls += 1
         return EngineOutput(markdown="# Cached\n\nBody.", engine_version="9.9.9")
 

@@ -50,8 +50,9 @@ layout and table models from the HuggingFace hub on first run and then runs them
 ```python
 @dataclass(frozen=True)
 class ProgressEvent:
-    phase: str      # machine-readable key, e.g. "engine_load"
-    message: str    # human-readable text for display
+    phase: str  # machine-readable key, e.g. "engine_load"
+    message: str  # human-readable text for display
+
 
 ProgressCallback = Callable[[ProgressEvent], None]
 ```

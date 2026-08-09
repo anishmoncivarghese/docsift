@@ -21,12 +21,12 @@ class OkEngine(ConversionEngine):
     def version(cls) -> str:
         return "9.9.9"
 
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         return EngineOutput(markdown="# Job\n\nBody text.\n", engine_version="9.9.9")
 
 
 class BoomEngine(OkEngine):
-    def convert(self, path: Path, options=None) -> EngineOutput:
+    def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
         raise ValueError("secret document content")
 
 
@@ -125,7 +125,7 @@ def test_job_cancelled_by_a_concurrent_delete_never_indexes_any_chunks(tmp_path)
     release = threading.Event()
 
     class SlowEngine(OkEngine):
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             release.wait(timeout=30)
             return EngineOutput(markdown="# Job\n\nBody text.\n", engine_version="9.9.9")
 
@@ -201,7 +201,7 @@ def test_failed_job_error_names_the_original_filename_not_the_temp_copy(tmp_path
     told a file they never named failed, and the temp-naming scheme leaks."""
 
     class RaisingEngine(OkEngine):
-        def convert(self, path: Path, options=None) -> EngineOutput:
+        def convert(self, path: Path, options=None, on_progress=None) -> EngineOutput:
             raise RuntimeError("boom")
 
     source = tmp_path / "tmpxyz123.pdf"
