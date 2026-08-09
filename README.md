@@ -18,9 +18,13 @@ relevant chunks back instead of a whole document.
 
 ## Quickstart
 
-    pip install "docsift[markitdown]"    # Word, Excel, PowerPoint, HTML, CSV, EPUB
-    pip install "docsift[docling]"       # PDFs (large: ML layout models)
-    pip install "docsift[all]"           # both engines, the HTTP API and MCP
+Pick the engine you need — `markitdown` for Word, Excel, PowerPoint, HTML, CSV
+and EPUB; `docling` for PDFs (a large download: ML layout models); `all` for both
+engines plus the HTTP API and MCP server.
+
+    pip install "docsift[markitdown]"
+    pip install "docsift[docling]"
+    pip install "docsift[all]"
 
     docsift convert report.pdf
 
@@ -48,30 +52,40 @@ DocSift needs **Python 3.11 or newer**. If your default is older, the version
 flag above is what avoids an unsatisfiable-requirements error. Expect a large
 download: `docling` brings PyTorch and layout models.
 
-Check it landed, and note the path — you will need it:
+Check it landed. Run these one at a time; the second prints the path to the
+executable, which the next step needs.
 
     docsift --version
-    which docsift          # e.g. /Users/you/.local/bin/docsift
+
+    which docsift
 
 ### 2. Register it with your client
 
-Claude Code:
+For Claude Code, `$(which docsift)` fills in the path for you, so this works as
+written:
 
-    claude mcp add --scope user docsift -- /Users/you/.local/bin/docsift mcp
-    claude mcp list        # should report: docsift ... ✔ Connected
+    claude mcp add --scope user docsift -- "$(which docsift)" mcp
+
+Then confirm it started — look for `docsift ... ✔ Connected`:
+
+    claude mcp list
 
 `--scope user` makes it available in every project; without it, the server is
 registered only for the directory you were in.
 
 Claude Desktop, Codex, Cursor and others take a config file — for Claude Desktop
 that is `~/Library/Application Support/Claude/claude_desktop_config.json` on
-macOS. Add `docsift` alongside anything already there, then restart the app:
+macOS. Add `docsift` alongside anything already there, then restart the app.
+
+**Replace the command below with the exact path `which docsift` printed.** A
+config file cannot work it out for itself, and a wrong path fails with
+`ENOENT: no such file or directory`:
 
 ```json
 {
   "mcpServers": {
     "docsift": {
-      "command": "/Users/you/.local/bin/docsift",
+      "command": "/replace/with/the/path/from/which/docsift",
       "args": ["mcp"]
     }
   }
@@ -154,12 +168,16 @@ filesystem access of the user who started it.
 
     docsift convert report.pdf --max-tokens 800 --overlap 100
     docsift convert report.pdf --engine markitdown
-    docsift inspect report.pdf                     # what it would do, without converting
-    docsift compare report.pdf                     # run both engines, diff the results
+    docsift inspect report.pdf
+    docsift compare report.pdf
     docsift search doc_xxxxxxxxxxxx "operational risk"
     docsift search doc_xxxxxxxxxxxx '"operational risk"' --limit 5 --context 1
     docsift cache info
     docsift cache clear
+
+`inspect` reports what DocSift would do with a file — engine, identity, cache
+status — without converting it. `compare` runs both engines on the same document
+and writes a diff of the results.
 
 Conversion cleans repeated headers and footers, page numbers and image
 references, then splits the text into token-budgeted chunks that carry their
@@ -184,17 +202,21 @@ and are not comparable across requests.
 Conversion always runs in the background: a long PDF can take minutes, and a
 client expecting a synchronous response will time out.
 
-    # 202 with {"job_id": ..., "document_id": ..., "status": "queued"}
+Upload, and get back `202` with a job id and a document id:
+
     curl -sS -F file=@report.pdf http://127.0.0.1:8000/v1/documents
 
-    # poll until "succeeded" or "failed"
+Poll until the status is `succeeded` or `failed`:
+
     curl -sS http://127.0.0.1:8000/v1/jobs/job_xxxxxxxxxxxxxxxx
 
-    # then retrieve
+Then retrieve the whole document:
+
     curl -sS http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/markdown
     curl -sS http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/chunks
 
-    # or ask a question and get only the relevant chunks
+Or ask a question and get only the relevant chunks:
+
     curl -sS --get --data-urlencode 'q=operational risk' \
       --data 'limit=5' --data 'max_tokens=5000' \
       http://127.0.0.1:8000/v1/documents/doc_xxxxxxxxxxxx/search

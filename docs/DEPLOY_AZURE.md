@@ -181,7 +181,9 @@ verification instance, not a public demo.
 
 When you are done verifying, stop paying for it:
 
-    az containerapp update -g $RG -n $APP --min-replicas 0    # keeps the app, stops the compute
+    az containerapp update -g $RG -n $APP --min-replicas 0
+
+That keeps the app defined but stops the compute.
 
 Or remove everything:
 

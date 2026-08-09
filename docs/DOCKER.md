@@ -24,10 +24,10 @@ Expect a slow first build (model download) and a multi-gigabyte image.
 uid 10001, not root. A named volume like the example above is created
 owned by that user automatically. A host bind mount
 
-    docker run -p 8000:8000 -v /host/path:/data docsift   # will not start
+    docker run -p 8000:8000 -v /host/path:/data docsift
 
-arrives **root-owned**, so uid 10001 cannot create the database file and the
-container fails on its first request. If you need a bind mount for a
+will not start: the mount arrives **root-owned**, so uid 10001 cannot create the
+database file and the container fails on its first request. If you need a bind mount for a
 specific host path, `chown 10001:10001 /host/path` first:
 
     sudo chown 10001:10001 /host/path
