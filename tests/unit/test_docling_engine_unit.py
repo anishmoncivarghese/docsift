@@ -59,3 +59,34 @@ def test_chunking_failure_degrades_to_warning(monkeypatch, tmp_path):
     assert output.markdown.startswith("# Hi")
     assert output.chunks is None
     assert any(w.code == "docling_chunker_unavailable" for w in output.warnings)
+
+
+def test_models_are_cached_is_false_when_caches_are_empty(tmp_path, monkeypatch):
+    from docsift.engines.docling_engine import models_are_cached
+
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    assert models_are_cached() is False
+
+
+def test_models_are_cached_is_true_when_the_hub_cache_has_content(tmp_path, monkeypatch):
+    from docsift.engines.docling_engine import models_are_cached
+
+    hub = tmp_path / "hf" / "hub" / "models--ds4sd--docling-models"
+    hub.mkdir(parents=True)
+    (hub / "config.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    assert models_are_cached() is True
+
+
+def test_models_are_cached_is_true_when_docling_cache_has_content(tmp_path, monkeypatch):
+    from docsift.engines.docling_engine import models_are_cached
+
+    monkeypatch.delenv("HF_HOME", raising=False)
+    home = tmp_path / "home"
+    docling_cache = home / ".cache" / "docling" / "models"
+    docling_cache.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    assert models_are_cached() is True

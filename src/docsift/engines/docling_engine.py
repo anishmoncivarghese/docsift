@@ -1,11 +1,32 @@
+import os
 from importlib import metadata, util
 from pathlib import Path
 
 from docsift.core.exceptions import ConversionFailedError
 from docsift.core.models import Chunk, ConversionWarning, EngineOutput
 from docsift.core.options import ChunkOptions, ConversionOptions
-from docsift.core.progress import ProgressCallback
+from docsift.core.progress import ProgressCallback, emit
 from docsift.engines.base import ConversionEngine
+
+
+def models_are_cached() -> bool:
+    """True when docling's models look present on disk.
+
+    Filesystem-only on purpose: it must answer before docling is imported, and
+    must work in a test run where docling is not installed at all. When the
+    answer is uncertain -- an unreadable home directory, say -- it returns True
+    so the caller stays quiet. A false "downloading 1 GB" on every warm run
+    would be a worse defect than the silence this is helping to fix.
+    """
+    hf_home = os.environ.get("HF_HOME")
+    hub = Path(hf_home) / "hub" if hf_home else Path.home() / ".cache" / "huggingface" / "hub"
+    for candidate in (hub, Path.home() / ".cache" / "docling"):
+        try:
+            if candidate.is_dir() and any(candidate.iterdir()):
+                return True
+        except OSError:
+            return True  # cannot tell; stay quiet
+    return False
 
 
 class DoclingEngine(ConversionEngine):
@@ -34,9 +55,17 @@ class DoclingEngine(ConversionEngine):
         options: ConversionOptions | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> EngineOutput:
+        emit(on_progress, "engine_load", "loading docling (this imports PyTorch)")
+        if not models_are_cached():
+            emit(
+                on_progress,
+                "model_download",
+                "first run: downloading layout and table models (~1 GB). This happens once.",
+            )
         from docling.document_converter import DocumentConverter
 
         chunk_options = options.chunk if options else ChunkOptions()
+        emit(on_progress, "convert", f"converting {path.name}")
         try:
             result = DocumentConverter().convert(str(path))
             document = result.document
