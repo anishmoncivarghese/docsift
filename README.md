@@ -52,6 +52,15 @@ DocSift needs **Python 3.11 or newer**. If your default is older, the version
 flag above is what avoids an unsatisfiable-requirements error. Expect a large
 download: `docling` brings PyTorch and layout models.
 
+**On Linux, add `--torch-backend cpu`.** The default resolves to the CUDA build
+of PyTorch — 5.3 GB installed, roughly 2 GB of it `nvidia-*` wheels that a
+machine without an NVIDIA GPU never loads. With the flag it is 1.6 GB and
+conversion is unchanged:
+
+    uv tool install --python 3.12 --torch-backend cpu "docsift[mcp,docling,markitdown]"
+
+macOS wheels are CPU-only already, so the flag changes nothing there.
+
 Check it landed. Run these one at a time; the second prints the path to the
 executable, which the next step needs.
 
@@ -133,8 +142,12 @@ No commands to learn — describe what you want:
 
 > what does report.pdf say about Q3 revenue?
 
-The first question about a new file converts it, and on a PDF that is slow: a
-34-page report takes about three minutes while the layout and table models run.
+The first question about a new file converts it, and on a PDF that is slow —
+about three minutes. That is startup cost, not page count: Docling downloads its
+layout and table models from HuggingFace on the very first conversion, then
+loads PyTorch. A three-page test file takes about as long as a thirty-page
+report, so picking something small to "try it quickly" does not help.
+
 It happens once. Afterwards the file is recognised by its content and answers
 come back immediately, even if you move or rename it.
 
@@ -204,13 +217,19 @@ document this tool exists for: dense tables, footnotes, multi-column stretches.
 |---|---|
 | Whole document | ~21,000 tokens, 42 chunks |
 | One question answered | ~4,000 tokens, 5 passages, with pages to cite |
-| First question (conversion) | ~3 minutes |
+| First conversion, ever | ~3 minutes — mostly a one-time model download |
+| First conversion of any later file | seconds to a minute, by size |
 | Every question after | immediate |
 
-The token gap is the point, and it widens with document length. The three
-minutes is the honest price of Docling's layout and table models, paid once per
-document — [convert it ahead of time](#3-ask) if you would rather not wait
-inside a conversation.
+The token gap is the point, and it widens with document length.
+
+Be clear about where the three minutes goes, because it is easy to misread as
+"big documents are slow". Most of it is Docling fetching its layout and table
+models the first time it ever runs, plus loading PyTorch. On a clean Linux
+machine a **three-page, 1.8 KB** PDF took 186 seconds — essentially the same as
+the 34-page report. After that first run the models are on disk and conversion
+scales with the document. `docsift convert` shows a live spinner throughout, so
+you can see it working rather than guessing.
 
 `search_document` takes `limit` and `max_tokens` as well, and a model will set
 them when you ask for more or less. The defaults return five passages within a
@@ -219,11 +238,19 @@ each in the report above — so if answers feel truncated, a larger `max_tokens`
 is the dial, and it is cheaper than the model asking the same question several
 times over.
 
-One caveat the numbers do not show: **search matches words, not meaning.**
+One caveat the numbers do not show: **search is lexical, not semantic.** DocSift
+indexes chunks in SQLite FTS5 and ranks them with BM25. It matches the words you
+type — not synonyms, not paraphrases, not meaning. Ask for "termination clause"
+and a section that only ever says "ending the agreement" will not come back.
 Asking that report about "energy prices" surfaced a section on shipping and
-fertiliser costs because those passages happen to contain the phrase. A question
-worded "why did transport costs rise?" might have missed it. Choose words that
-would literally appear in the text — and see
+fertiliser costs because those passages happen to contain the phrase; a question
+worded "why did transport costs rise?" might have missed it entirely.
+
+That is a deliberate trade, not an oversight: no embedding model to download, no
+index to rebuild, no GPU, nothing leaving your machine, and a first run measured
+in minutes rather than tens of minutes. If you need semantic retrieval, the
+Markdown and chunk JSON DocSift writes are clean input for a vector store — a
+reasonable thing to want, and not what this tool does today. See
 [Known limitations](https://github.com/anishmoncivarghese/docsift/blob/main/docs/LIMITATIONS.md).
 
 Everything happens in that process, on your machine. Nothing listens on a port
