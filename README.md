@@ -156,6 +156,10 @@ answer from that — you get the right answer having never touched DocSift, whic
 makes a broken setup look like a working one. If your assistant reports reading
 a file rather than calling `docsift`, the check has told you nothing.
 
+The first call will ask your permission to run the tool — approve it, and choose
+the "don't ask again" option if your client offers one, so later questions are
+not interrupted mid-thought.
+
 Success looks like a `docsift` tool call in the transcript, returning that one
 sentence. This needs no PDF and no model weights, so a failure here is a setup
 problem — the command not on `PATH`, or the server not registered — and not a
