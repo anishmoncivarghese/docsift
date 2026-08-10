@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.5 — 2026-08-10
+
+Documentation only; no code changes. Released so the page on PyPI matches the
+repository, since that is where most people meet the project first.
+
+- **Says which MCP clients this works with, and which it does not.** "MCP
+  server" reads to a lot of people as "works with ChatGPT". It does not:
+  claude.ai in the browser and ChatGPT both accept only a *remote* server at a
+  public HTTPS URL, and DocSift speaks stdio. There is no configuration that
+  changes that, so the README now says so before anyone spends 1.6 GB finding
+  out. Reaching those clients would mean running DocSift on a server and
+  uploading documents to it, which is the opposite of what it is for.
+
+- **Adds the VS Code and Codex CLI configurations**, which were missing —
+  including the startup timeout Codex needs. Its default allows ten seconds, and
+  DocSift loads PyTorch on the way up, so the default reports a server that
+  failed to start when it was only still starting.
+
 ## 0.5.4 — 2026-08-10
 
 - **Fixed: two more lines of engine output reached the terminal on Linux.**
