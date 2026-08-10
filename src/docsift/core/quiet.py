@@ -12,6 +12,9 @@ which is what a bug report needs.
 
 import logging
 import os
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 # Every logger that writes to the terminal during a conversion. Children are
 # covered by their parent unless they set a level of their own, which the torch
@@ -91,18 +94,43 @@ def silence_engine_loggers() -> None:
     _quiet_onnxruntime()
 
 
-def _quiet_onnxruntime() -> None:
-    """Turn down onnxruntime's C++ logger, which writes past Python entirely.
+@contextmanager
+def _stderr_to_devnull() -> Iterator[None]:
+    """Detach fd 2 for the duration of the block.
 
-    On Linux it announces its PCI bus scan at WARNING on the way up -- native
-    code writing to fd 2, so no logging filter can see it. The severity has to
-    be set before any inference session is created, which means importing
-    onnxruntime here rather than waiting for rapidocr to do it mid-conversion.
-    The import is not wasted: this runs only on the docling path, which loads
-    onnxruntime regardless.
+    The only way to stop output from C code, which never passes through
+    sys.stderr and so cannot be redirected or filtered from Python. Kept to the
+    narrowest possible scope for that reason.
+    """
+    sys.stderr.flush()
+    saved = os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved, 2)
+        os.close(devnull)
+        os.close(saved)
+
+
+def _quiet_onnxruntime() -> None:
+    """Stop onnxruntime announcing its PCI bus scan on Linux.
+
+    Its C++ logger writes straight to fd 2, so no logging filter reaches it, and
+    the message is emitted while the module is *importing* -- which defeats the
+    obvious fix of importing it early to lower the severity, because that import
+    is what produces the line.
+
+    So the import itself runs with fd 2 detached, and the severity is lowered
+    afterwards for any session created later. Only the import is muffled;
+    everything the conversion does after this keeps a live stderr, so a genuine
+    failure still reaches the user. The import is not wasted work: this runs
+    only on the docling path, which loads onnxruntime regardless.
     """
     try:
-        import onnxruntime
+        with _stderr_to_devnull():
+            import onnxruntime
 
         onnxruntime.set_default_logger_severity(3)  # 3 = error
     except Exception:  # noqa: BLE001 - absent, or a build without the setter

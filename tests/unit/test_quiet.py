@@ -133,3 +133,39 @@ def test_a_missing_onnxruntime_is_not_an_error(monkeypatch):
     monkeypatch.delenv("DOCSIFT_VERBOSE", raising=False)
 
     silence_engine_loggers()  # must not raise
+
+
+def test_stderr_is_restored_after_the_muffled_import(monkeypatch, capfd):
+    """Detaching fd 2 is only safe if it always comes back."""
+    import os
+
+    from docsift.core.quiet import _stderr_to_devnull
+
+    before = os.dup(2)
+    try:
+        with _stderr_to_devnull():
+            os.write(2, b"swallowed\n")
+        os.write(2, b"visible\n")
+    finally:
+        os.close(before)
+
+    captured = capfd.readouterr()
+    assert "swallowed" not in captured.err
+    assert "visible" in captured.err
+
+
+def test_stderr_is_restored_even_when_the_block_raises():
+    import os
+
+    from docsift.core.quiet import _stderr_to_devnull
+
+    with contextlib_suppress():
+        with _stderr_to_devnull():
+            raise RuntimeError("import blew up")
+    os.write(2, b"")  # fd 2 is usable again
+
+
+def contextlib_suppress():
+    import contextlib
+
+    return contextlib.suppress(RuntimeError)
