@@ -10,10 +10,22 @@ name: Clean-room install
 # the CUDA build of PyTorch (5.3 GB, vs 1.6 GB with --torch-backend auto), and
 # that a cold conversion sat silent for 154 seconds.
 #
-# Actions -> Clean-room install -> Run workflow.
+# Actions -> Clean-room install -> Run workflow, and give it the version you
+# just published. Pinning is not optional: uv's cache (and PyPI's CDN) will
+# happily serve the previous release for a while after a publish, and a job
+# that silently tests the old version is worse than no job at all.
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to test, e.g. 0.5.2. Leave blank for whatever PyPI serves."
+        required: false
+        default: ""
+
+env:
+  # Appended to the requirement, so a blank input means "latest".
+  PIN: ${{ inputs.version && format('=={0}', inputs.version) || '' }}
 
 permissions:
   contents: read
@@ -31,13 +43,15 @@ jobs:
           df -h /
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       # The exact command from README step 1. No checkout: this must resolve
       # entirely from PyPI, the way a stranger's machine would.
       - name: uv tool install "docsift[mcp,docling,markitdown]"
         run: |
           start=$(date +%s)
-          uv tool install --python 3.12 "docsift[mcp,docling,markitdown]"
+          uv tool install --refresh --python 3.12 "docsift[mcp,docling,markitdown]${PIN}"
           echo "INSTALL_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
 
       - name: Report install cost
@@ -48,8 +62,14 @@ jobs:
           df -h /
 
       # README step 1's verification commands, run exactly as written.
-      - name: docsift --version
-        run: docsift --version
+      - name: docsift --version matches what we asked for
+        run: |
+          installed=$(docsift --version | awk '{print $NF}')
+          echo "installed: $installed"
+          if [ -n "${{ inputs.version }}" ] && [ "$installed" != "${{ inputs.version }}" ]; then
+            echo "::error::expected ${{ inputs.version }}, got $installed -- a stale cache or CDN served the wrong release"
+            exit 1
+          fi
 
       - name: which docsift
         run: which docsift
@@ -145,8 +165,13 @@ jobs:
           python -m venv ~/cleanroom-venv
           if [ -f ~/cleanroom-venv/bin/activate ]; then . ~/cleanroom-venv/bin/activate; else . ~/cleanroom-venv/Scripts/activate; fi
           python -m pip install --upgrade pip
-          pip install "docsift[markitdown]"
-          docsift --version
+          pip install "docsift[markitdown]${PIN}"
+          installed=$(docsift --version | awk '{print $NF}')
+          echo "installed: $installed"
+          if [ -n "${{ inputs.version }}" ] && [ "$installed" != "${{ inputs.version }}" ]; then
+            echo "::error::expected ${{ inputs.version }}, got $installed -- a stale cache or CDN served the wrong release"
+            exit 1
+          fi
 
       - uses: actions/checkout@v4
         with:
@@ -166,7 +191,7 @@ jobs:
         run: |
           python -m venv ~/bare-venv
           if [ -f ~/bare-venv/bin/activate ]; then . ~/bare-venv/bin/activate; else . ~/bare-venv/Scripts/activate; fi
-          pip install docsift
+          pip install "docsift${PIN}"
           cd "$GITHUB_WORKSPACE"
           set +e
           out=$(docsift convert src/tests/fixtures/sample.pdf 2>&1)
@@ -186,12 +211,14 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: uv tool install --torch-backend auto
         run: |
           start=$(date +%s)
-          uv tool install --python 3.12 --torch-backend auto \
-            "docsift[mcp,docling,markitdown]"
+          uv tool install --refresh --python 3.12 --torch-backend auto \
+            "docsift[mcp,docling,markitdown]${PIN}"
           echo "::notice::auto-backend install took $(( $(date +%s) - start ))s"
 
       - name: Report install cost
@@ -218,7 +245,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
       - name: uv tool install on 3.11
         run: |
-          uv tool install --python 3.11 "docsift[mcp,markitdown]"
-          docsift --version
+          uv tool install --refresh --python 3.11 "docsift[mcp,markitdown]${PIN}"
+          installed=$(docsift --version | awk '{print $NF}')
+          echo "installed: $installed"
+          if [ -n "${{ inputs.version }}" ] && [ "$installed" != "${{ inputs.version }}" ]; then
+            echo "::error::expected ${{ inputs.version }}, got $installed -- a stale cache or CDN served the wrong release"
+            exit 1
+          fi
