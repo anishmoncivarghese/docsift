@@ -6,6 +6,7 @@ from docsift.core.exceptions import ConversionFailedError
 from docsift.core.models import Chunk, ConversionWarning, EngineOutput
 from docsift.core.options import ChunkOptions, ConversionOptions
 from docsift.core.progress import ProgressCallback, emit
+from docsift.core.quiet import prepare_quiet_env, silence_engine_loggers
 from docsift.engines.base import ConversionEngine
 
 
@@ -92,7 +93,13 @@ class DoclingEngine(ConversionEngine):
                 "model_download",
                 "first run: downloading layout and table models (~1 GB). This happens once.",
             )
+        # Order matters: the env switches are read as docling imports, and the
+        # logger levels have to be reset afterwards because rapidocr builds its
+        # own logger at import and sets it to INFO.
+        prepare_quiet_env()
         from docling.document_converter import DocumentConverter
+
+        silence_engine_loggers()
 
         chunk_options = options.chunk if options else ChunkOptions()
         emit(on_progress, "convert", f"converting {path.name}")

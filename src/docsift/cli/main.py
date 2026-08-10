@@ -53,8 +53,16 @@ def convert(
         False, "--no-cache", help="Convert even if a cached result exists."
     ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output on stderr."),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show the conversion engine's own logging."
+    ),
 ) -> None:
     """Convert a document to clean Markdown plus a normalized JSON result."""
+    import os
+
+    if verbose:
+        os.environ["DOCSIFT_VERBOSE"] = "1"
+
     from docsift.core.exceptions import DocSiftError
     from docsift.core.options import ChunkOptions, CleanOptions, ConversionOptions
     from docsift.services.conversion_service import convert_document
