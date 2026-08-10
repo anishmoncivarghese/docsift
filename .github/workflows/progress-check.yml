@@ -1,0 +1,58 @@
+name: Progress indicator (real docling)
+
+# Verifies that the phase events actually bracket the slow docling call, on a
+# machine with cold model caches. The unit tests use fakes; this is the only
+# place the real 150-second gap is observed.
+#
+# Temporary: delete once verified.
+
+on:
+  push:
+    branches: [feature/convert-progress]
+
+permissions:
+  contents: read
+
+jobs:
+  docling-progress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install this branch with docling
+        run: uv sync --extra docling --extra markitdown --extra api
+
+      - name: Convert a PDF and capture progress on stderr
+        run: |
+          start=$(date +%s)
+          uv run docsift convert tests/fixtures/multipage.pdf \
+            --output out 2> progress.txt
+          echo "::notice::convert took $(( $(date +%s) - start ))s"
+          echo "--- stderr ---"
+          cat progress.txt
+
+      - name: Assert the phases fired
+        run: |
+          grep -q "loading docling" progress.txt || {
+            echo "::error::no engine_load phase"; exit 1; }
+          grep -q "downloading layout and table models" progress.txt || {
+            echo "::error::no model_download warning on a cold cache"; exit 1; }
+          grep -q "converting multipage.pdf" progress.txt || {
+            echo "::error::no convert phase"; exit 1; }
+          grep -q "writing output" progress.txt || {
+            echo "::error::no write phase"; exit 1; }
+          echo "all phases present"
+
+      - name: Second run is warm and does not repeat the download warning
+        run: |
+          uv run docsift convert tests/fixtures/sample.pdf \
+            --output out --no-cache 2> warm.txt
+          cat warm.txt
+          if grep -q "downloading layout and table models" warm.txt; then
+            echo "::error::model_download warning repeated on a warm cache"; exit 1
+          fi
+          echo "warm run stayed quiet about the download"
