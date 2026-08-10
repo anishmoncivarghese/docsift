@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.3 — 2026-08-10
+
+- **Fixed: the conversion engines' own logging buried everything else.**
+  Converting a 34-page PDF wrote 113 lines to stderr, 107 of them from docling
+  and its model stack — torch dynamo graph-break notices, and one warning per
+  page reporting that OCR found no text, which is the normal case for a
+  born-digital PDF rather than a problem.
+
+  It made the progress output added in 0.5.2 effectively invisible, and the wall
+  of yellow WARNING lines read like a failure on a conversion that had actually
+  succeeded. Same document now writes 7 lines.
+
+  Anything at ERROR or above still comes through. `docsift convert --verbose`,
+  or `DOCSIFT_VERBOSE=1` for the MCP server and HTTP API, restores every line —
+  which is what a bug report needs.
+
 ## 0.5.2 — 2026-08-10
 
 - **`docsift convert` now shows progress instead of going silent.** A cold PDF
