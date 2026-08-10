@@ -101,3 +101,35 @@ def test_filter_is_not_added_twice(monkeypatch):
     silence_engine_loggers()
     silence_engine_loggers()
     assert len(logging.getLogger("RapidOCR").filters) == 1
+
+
+def test_onnxruntime_severity_is_lowered(monkeypatch):
+    """The PCI-scan warning is native code: a logging filter cannot reach it."""
+    import sys
+    import types
+
+    calls = []
+    fake = types.ModuleType("onnxruntime")
+    fake.set_default_logger_severity = calls.append
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake)
+    monkeypatch.delenv("DOCSIFT_VERBOSE", raising=False)
+
+    silence_engine_loggers()
+
+    assert calls == [3]
+
+
+def test_a_missing_onnxruntime_is_not_an_error(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name == "onnxruntime":
+            raise ImportError("not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", refuse)
+    monkeypatch.delenv("DOCSIFT_VERBOSE", raising=False)
+
+    silence_engine_loggers()  # must not raise

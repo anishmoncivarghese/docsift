@@ -26,6 +26,8 @@ NOISY_LOGGERS = (
     "torch._dynamo",
     "torch._inductor",
     "onnxruntime",
+    "huggingface_hub",
+    "filelock",
     "PIL",
 )
 
@@ -86,3 +88,22 @@ def silence_engine_loggers() -> None:
         logger.setLevel(logging.ERROR)
         if not any(isinstance(existing, _MinLevel) for existing in logger.filters):
             logger.addFilter(_MinLevel(logging.ERROR))
+    _quiet_onnxruntime()
+
+
+def _quiet_onnxruntime() -> None:
+    """Turn down onnxruntime's C++ logger, which writes past Python entirely.
+
+    On Linux it announces its PCI bus scan at WARNING on the way up -- native
+    code writing to fd 2, so no logging filter can see it. The severity has to
+    be set before any inference session is created, which means importing
+    onnxruntime here rather than waiting for rapidocr to do it mid-conversion.
+    The import is not wasted: this runs only on the docling path, which loads
+    onnxruntime regardless.
+    """
+    try:
+        import onnxruntime
+
+        onnxruntime.set_default_logger_severity(3)  # 3 = error
+    except Exception:  # noqa: BLE001 - absent, or a build without the setter
+        pass
