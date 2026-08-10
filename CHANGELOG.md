@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.2 — 2026-08-10
+
+- **`docsift convert` now shows progress instead of going silent.** A cold PDF
+  conversion printed nothing for two and a half minutes — on a clean Linux
+  machine a three-page, 1.8 KB fixture took 186 seconds, 154 of them with no
+  output at all. There was no way to tell a running conversion from a hung one,
+  and the reasonable response to that is Ctrl-C.
+
+  The CLI now shows a spinner with the current phase and elapsed time: loading
+  the engine, the one-time model download, converting, chunking, writing. It
+  writes to stderr, so piping stdout is unaffected; when stderr is not a
+  terminal it degrades to one plain line per phase, and `--quiet` turns it off.
+
+  The wait itself is unchanged, and it is worth being clear about where it goes:
+  almost all of it is Docling fetching its layout and table models the first
+  time it ever runs, plus loading PyTorch. It is startup cost, not page count —
+  a three-page file costs about the same as a thirty-page one, and only the
+  first conversion pays it.
+
+- **DocSift now says when you are carrying an unused CUDA build of PyTorch.**
+  On Linux the default install resolves to the CUDA build: 5.3 GB on disk,
+  roughly 2 GB of it `nvidia-*` wheels that a machine without an NVIDIA GPU
+  never loads. No published wheel can prevent this — the CPU builds live on a
+  separate package index, and package metadata cannot redirect an installer —
+  so instead the first conversion on such a machine now reports it, with the
+  command that fixes it.
+
+  For uv users, `uv tool install --torch-backend auto` avoids the problem up
+  front and brings the install to 1.6 GB, while leaving CUDA in place for people
+  who do have a GPU. The README documents it.
+
+- `rich` is now a direct dependency rather than one inherited from `typer`.
+
 ## 0.5.1 — 2026-08-09
 
 - **Fixed: the MCP server's default token budget was a third of the CLI's**, so
