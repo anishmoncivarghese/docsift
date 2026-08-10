@@ -1,0 +1,51 @@
+name: Integration
+
+# The normal CI job installs only the markitdown extra, so nothing that needs a
+# real docling run has ever executed in CI -- tests/integration has been dead
+# weight. That is how 0.5.2 shipped a progress indicator drowned out by 107
+# lines of engine logging: every unit test passed.
+#
+# Runs on main and on demand rather than on every PR: docling pulls PyTorch and
+# downloads models, so this is minutes, not seconds.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "src/docsift/engines/**"
+      - "src/docsift/core/quiet.py"
+      - "tests/integration/**"
+      - "tests/fixtures/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with docling
+        run: uv sync --extra docling --extra markitdown --extra api
+
+      # Cache the models, not the packages: the download is the slow part and
+      # it is identical between runs.
+      - name: Cache docling models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-${{ runner.os }}-v1
+
+      - name: Run the integration tests
+        run: uv run pytest -m integration -v
