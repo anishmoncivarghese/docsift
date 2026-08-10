@@ -52,14 +52,19 @@ DocSift needs **Python 3.11 or newer**. If your default is older, the version
 flag above is what avoids an unsatisfiable-requirements error. Expect a large
 download: `docling` brings PyTorch and layout models.
 
-**On Linux, add `--torch-backend cpu`.** The default resolves to the CUDA build
+**On Linux, add `--torch-backend auto`.** The default resolves to the CUDA build
 of PyTorch — 5.3 GB installed, roughly 2 GB of it `nvidia-*` wheels that a
-machine without an NVIDIA GPU never loads. With the flag it is 1.6 GB and
-conversion is unchanged:
+machine without an NVIDIA GPU never loads. `auto` detects your driver and picks
+the right build, which is 1.6 GB on a machine without a GPU and leaves CUDA in
+place on one with a GPU:
 
-    uv tool install --python 3.12 --torch-backend cpu "docsift[mcp,docling,markitdown]"
+    uv tool install --python 3.12 --torch-backend auto "docsift[mcp,docling,markitdown]"
 
-macOS wheels are CPU-only already, so the flag changes nothing there.
+macOS wheels are CPU-only already, so the flag changes nothing there. It is a uv
+feature: with `pipx` or `pip` there is no equivalent, because the CPU builds live
+on a separate index and no published package can redirect an installer to it. If
+you install that way on a CPU-only Linux box, DocSift says so after your first
+conversion rather than letting several unused gigabytes pass unmentioned.
 
 Check it landed. Run these one at a time; the second prints the path to the
 executable, which the next step needs.

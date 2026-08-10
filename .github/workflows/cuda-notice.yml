@@ -1,0 +1,59 @@
+name: Unused-CUDA notice (real torch)
+
+# The unit tests fake torch. This is the only place the claim is checked
+# against the real published Linux wheel: that torch.version.cuda is set on
+# it, and that a runner with no GPU therefore trips the notice.
+#
+# Deliberately avoids docling and uv sync -- [tool.uv.sources] pins the CPU
+# index for this project, which is exactly what we must not use here.
+#
+# Temporary: delete once verified.
+
+on:
+  push:
+    branches: [feature/cuda-notice]
+
+permissions:
+  contents: read
+
+jobs:
+  real-cuda-torch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the default (CUDA) torch from PyPI
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch pydantic
+          python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)"
+
+      - name: The notice fires on a CUDA build with no GPU
+        run: |
+          PYTHONPATH=src python - <<'PY'
+          from docsift.engines.docling_engine import unused_cuda_warning
+
+          warning = unused_cuda_warning()
+          print("warning:", warning)
+          assert warning is not None, "no notice on a CUDA build without a GPU"
+          assert warning.code == "unused_cuda_build"
+          print("OK")
+          PY
+
+      - name: The notice stays quiet on a CPU build
+        run: |
+          pip install --force-reinstall torch \
+            --index-url https://download.pytorch.org/whl/cpu
+          python -c "import torch; print('cuda attr:', torch.version.cuda)"
+          PYTHONPATH=src python - <<'PY'
+          from docsift.engines.docling_engine import unused_cuda_warning
+
+          warning = unused_cuda_warning()
+          print("warning:", warning)
+          assert warning is None, "false positive on a CPU-only build"
+          print("OK")
+          PY

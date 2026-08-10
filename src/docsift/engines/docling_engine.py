@@ -29,6 +29,36 @@ def models_are_cached() -> bool:
     return False
 
 
+def unused_cuda_warning() -> ConversionWarning | None:
+    """Flag a CUDA build of PyTorch on a machine with no usable GPU.
+
+    On Linux, `pip install docsift[docling]` resolves to the CUDA build --
+    around 3.7 GB of nvidia wheels that a CPU-only machine never loads. No
+    published wheel can prevent that: the CPU builds live on a separate index,
+    and package metadata cannot redirect an installer. Saying so once, at the
+    point the cost is actually paid, is the only thing that reaches someone who
+    installed without reading the README.
+
+    Returns None whenever the answer is not clearly yes, including any torch
+    that does not look the way we expect.
+    """
+    try:
+        import torch
+
+        if torch.version.cuda is None or torch.cuda.is_available():
+            return None
+    except Exception:  # noqa: BLE001 - an advisory note must never break a run
+        return None
+    return ConversionWarning(
+        code="unused_cuda_build",
+        message=(
+            "PyTorch was installed with CUDA support but no usable GPU was found; "
+            "roughly 3.7 GB of that install is unused. Reinstall with "
+            "'uv tool install --torch-backend auto' to drop it."
+        ),
+    )
+
+
 class DoclingEngine(ConversionEngine):
     """Adapter for IBM docling. Imports stay lazy; first run downloads models."""
 
@@ -79,6 +109,12 @@ class DoclingEngine(ConversionEngine):
                 f"docling failed on '{path.name}': {type(exc).__name__}"
             ) from exc
         chunks, warnings = self._chunk(document, chunk_options)
+        # Checked after the conversion, not before: torch is already imported by
+        # then, so this costs nothing, and the note lands next to the wait it
+        # explains.
+        cuda_note = unused_cuda_warning()
+        if cuda_note is not None:
+            warnings = [*warnings, cuda_note]
         title = None
         for item in getattr(document, "texts", []):
             if type(item).__name__ == "TitleItem":

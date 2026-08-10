@@ -90,3 +90,66 @@ def test_models_are_cached_is_true_when_docling_cache_has_content(tmp_path, monk
     docling_cache.mkdir(parents=True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     assert models_are_cached() is True
+
+
+def _fake_torch(cuda_build, available):
+    module = types.ModuleType("torch")
+    module.version = types.SimpleNamespace(cuda=cuda_build)
+    module.cuda = types.SimpleNamespace(is_available=lambda: available)
+    return module
+
+
+def test_warns_when_the_cuda_build_cannot_be_used(monkeypatch):
+    from docsift.engines.docling_engine import unused_cuda_warning
+
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch("12.8", False))
+    warning = unused_cuda_warning()
+    assert warning is not None
+    assert warning.code == "unused_cuda_build"
+    assert "torch-backend" in warning.message
+
+
+def test_no_warning_when_a_gpu_is_actually_present(monkeypatch):
+    from docsift.engines.docling_engine import unused_cuda_warning
+
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch("12.8", True))
+    assert unused_cuda_warning() is None
+
+
+def test_no_warning_for_a_cpu_only_build(monkeypatch):
+    from docsift.engines.docling_engine import unused_cuda_warning
+
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch(None, False))
+    assert unused_cuda_warning() is None
+
+
+def test_no_warning_when_torch_looks_unfamiliar(monkeypatch):
+    from docsift.engines.docling_engine import unused_cuda_warning
+
+    monkeypatch.setitem(sys.modules, "torch", types.ModuleType("torch"))
+    assert unused_cuda_warning() is None
+
+
+def test_convert_attaches_the_cuda_note_to_its_warnings(monkeypatch, tmp_path):
+    class Document:
+        pages = {}
+        texts = []
+
+        def export_to_markdown(self, **kwargs):
+            return "# Title\n\nBody.\n"
+
+    class Converter:
+        def convert(self, path):
+            return types.SimpleNamespace(document=Document())
+
+    fake_module = types.ModuleType("docling.document_converter")
+    fake_module.DocumentConverter = Converter
+    monkeypatch.setitem(sys.modules, "docling", types.ModuleType("docling"))
+    monkeypatch.setitem(sys.modules, "docling.document_converter", fake_module)
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch("12.8", False))
+
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"%PDF-1.4\n")
+    output = DoclingEngine().convert(source)
+
+    assert any(w.code == "unused_cuda_build" for w in output.warnings)

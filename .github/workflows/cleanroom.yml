@@ -7,7 +7,7 @@ name: Clean-room install
 #
 # Run this by hand after every release, once PyPI has the new version. It has
 # already earned its keep twice: it found that the default Linux install pulls
-# the CUDA build of PyTorch (5.3 GB, vs 1.6 GB with --torch-backend cpu), and
+# the CUDA build of PyTorch (5.3 GB, vs 1.6 GB with --torch-backend auto), and
 # that a cold conversion sat silent for 154 seconds.
 #
 # Actions -> Clean-room install -> Run workflow.
@@ -63,9 +63,22 @@ jobs:
         run: |
           mkdir -p ~/cleanroom && cd ~/cleanroom
           start=$(date +%s)
-          docsift convert "$GITHUB_WORKSPACE/src/tests/fixtures/multipage.pdf"
+          docsift convert "$GITHUB_WORKSPACE/src/tests/fixtures/multipage.pdf" \
+            2> convert-stderr.txt
           echo "::notice::cold-start convert took $(( $(date +%s) - start ))s"
+          echo "--- stderr ---"
+          cat convert-stderr.txt
           ls -R output/ | head -30
+
+      # This runner has the CUDA build and no GPU -- exactly the case the
+      # unused-CUDA notice exists for. Reported, not asserted: the job installs
+      # the *published* version, so the notice only appears from 0.5.2 onward.
+      - name: Show whether the unused-CUDA notice fired
+        run: |
+          cd ~/cleanroom
+          grep -q "unused_cuda_build" convert-stderr.txt \
+            && echo "::notice::unused-CUDA notice present" \
+            || echo "::notice::no unused-CUDA notice (expected before 0.5.2)"
 
       - name: MCP server handshake over stdio
         run: |
@@ -166,20 +179,20 @@ jobs:
 
   # The default install pulls the CUDA build of torch on Linux: 5.3 GB on disk,
   # ~2.6 GB of it nvidia/triton wheels a CPU-only machine never touches. Does
-  # uv's CPU backend flag fix it, and does docling still work afterwards?
-  cpu-torch-linux:
-    name: CPU torch backend (Linux)
+  # uv's auto backend flag fix it, and does docling still work afterwards?
+  auto-torch-linux:
+    name: Auto torch backend (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: astral-sh/setup-uv@v5
 
-      - name: uv tool install --torch-backend cpu
+      - name: uv tool install --torch-backend auto
         run: |
           start=$(date +%s)
-          uv tool install --python 3.12 --torch-backend cpu \
+          uv tool install --python 3.12 --torch-backend auto \
             "docsift[mcp,docling,markitdown]"
-          echo "::notice::cpu-backend install took $(( $(date +%s) - start ))s"
+          echo "::notice::auto-backend install took $(( $(date +%s) - start ))s"
 
       - name: Report install cost
         run: |
@@ -197,7 +210,7 @@ jobs:
           mkdir -p ~/cleanroom && cd ~/cleanroom
           start=$(date +%s)
           docsift convert "$GITHUB_WORKSPACE/src/tests/fixtures/multipage.pdf"
-          echo "::notice::cpu-backend convert took $(( $(date +%s) - start ))s"
+          echo "::notice::auto-backend convert took $(( $(date +%s) - start ))s"
 
   python-minimum:
     name: Stated minimum (Python 3.11)
