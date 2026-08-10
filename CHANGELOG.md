@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.4 — 2026-08-10
+
+- **Fixed: two more lines of engine output reached the terminal on Linux.**
+  0.5.3 silenced the Python logging, which is all that macOS produces. A first
+  run on Linux still showed onnxruntime announcing its PCI bus scan, and — while
+  the model cache was still cold — a warning from the HuggingFace Hub about
+  unauthenticated requests.
+
+  The Hub one is a logger and simply joins the list. onnxruntime's could not be
+  fixed that way: it is C++ writing straight to file descriptor 2, and the
+  message is emitted while the module is *importing*, which defeats importing it
+  early to lower its log severity. That import now runs with the file descriptor
+  detached — only the import, so everything the conversion does afterwards keeps
+  a live stderr and real failures still surface.
+
+- Internal: `tests/integration` now runs in CI. It never had, because the normal
+  test job installs only the `markitdown` extra — which is how 0.5.2 shipped a
+  progress indicator buried under 107 lines of engine logging with every test
+  passing. There is also a new `scanned.pdf` fixture of rasterised text, so
+  docling's OCR path is exercised; every previous PDF fixture was born-digital
+  and skipped it entirely.
+
 ## 0.5.3 — 2026-08-10
 
 - **Fixed: the conversion engines' own logging buried everything else.**
