@@ -37,6 +37,31 @@ conversion will tell you so rather than failing obscurely.
 The shortest path to the point of this tool: let an assistant search your own
 documents, without pasting them anywhere.
 
+### Which clients this works with
+
+DocSift speaks MCP over **stdio** — the client starts it as a program on your
+machine. Anything that can do that is supported:
+
+| Client | Supported | How |
+|---|---|---|
+| Claude Code | yes | `claude mcp add` — [step 2](#2-register-it-with-your-client) |
+| Claude Desktop | yes | `claude_desktop_config.json` |
+| VS Code (Copilot agent mode) | yes | `.vscode/mcp.json` |
+| Codex CLI | yes | `~/.codex/config.toml` |
+| Cursor | yes | JSON config, same shape as VS Code |
+| **claude.ai in the browser** | **no** | needs a remote server |
+| **ChatGPT (web or desktop)** | **no** | needs a remote server |
+
+The last two are worth being clear about before you install anything. Their
+connector features only accept a **remote** MCP server at a public HTTPS URL,
+and DocSift has no remote transport — there is no configuration that makes a
+local one appear in those interfaces.
+
+That is a deliberate position rather than an oversight. Reaching them means
+running DocSift on a server and uploading your documents to it, which is the
+opposite of the thing this tool is for. A self-hosted remote transport is a
+reasonable future addition; sending your files to someone else's machine is not.
+
 ### 1. Install it as a command, not into a project
 
 An MCP client starts DocSift as a program, so it has to exist outside any
@@ -90,9 +115,42 @@ Then confirm it started — look for `docsift ... ✔ Connected`:
 `--scope user` makes it available in every project; without it, the server is
 registered only for the directory you were in.
 
-**That is the whole setup for Claude Code.** Skip the next part and go to step 3.
+**That is the whole setup for Claude Code.** Skip the other clients below and go
+to step 3.
 
-#### Claude Desktop, Codex, Cursor
+#### VS Code
+
+Copilot agent mode reads `.vscode/mcp.json` for one project, or the file behind
+the **MCP: Open User Configuration** command for all of them:
+
+```json
+{
+  "servers": {
+    "docsift": {
+      "type": "stdio",
+      "command": "/replace/with/the/path/from/which/docsift",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+#### Codex CLI
+
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.docsift]
+command = "/replace/with/the/path/from/which/docsift"
+args = ["mcp"]
+startup_timeout_sec = 60
+```
+
+Raise the timeout as shown. Codex allows ten seconds by default and DocSift
+loads PyTorch on the way up, so the default reports a server that failed to
+start when it was only still starting.
+
+#### Claude Desktop, Cursor
 
 These read a JSON config file instead. For Claude Desktop on macOS that is
 `~/Library/Application Support/Claude/claude_desktop_config.json`; create it if
