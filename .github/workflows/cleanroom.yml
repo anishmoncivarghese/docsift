@@ -1,0 +1,211 @@
+name: Clean-room install
+
+# Walks the README's published install instructions on a machine that has never
+# seen this project, installing from PyPI rather than from this checkout. The
+# regular CI job builds from source with a lockfile, so it cannot catch a broken
+# wheel, a missing extra, or a platform-specific dependency blowup.
+#
+# Run this by hand after every release, once PyPI has the new version. It has
+# already earned its keep twice: it found that the default Linux install pulls
+# the CUDA build of PyTorch (5.3 GB, vs 1.6 GB with --torch-backend cpu), and
+# that a cold conversion sat silent for 154 seconds.
+#
+# Actions -> Clean-room install -> Run workflow.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  uv-tool-linux:
+    name: uv tool install + docling + MCP (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Reclaim disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - uses: astral-sh/setup-uv@v5
+
+      # The exact command from README step 1. No checkout: this must resolve
+      # entirely from PyPI, the way a stranger's machine would.
+      - name: uv tool install "docsift[mcp,docling,markitdown]"
+        run: |
+          start=$(date +%s)
+          uv tool install --python 3.12 "docsift[mcp,docling,markitdown]"
+          echo "INSTALL_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Report install cost
+        run: |
+          echo "::notice::uv tool install took ${INSTALL_SECONDS}s"
+          echo "Installed tree size:"
+          du -sh ~/.local/share/uv/tools/docsift 2>/dev/null || true
+          df -h /
+
+      # README step 1's verification commands, run exactly as written.
+      - name: docsift --version
+        run: docsift --version
+
+      - name: which docsift
+        run: which docsift
+
+      - name: Fixture PDF
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Convert a PDF with docling (cold start)
+        run: |
+          mkdir -p ~/cleanroom && cd ~/cleanroom
+          start=$(date +%s)
+          docsift convert "$GITHUB_WORKSPACE/src/tests/fixtures/multipage.pdf"
+          echo "::notice::cold-start convert took $(( $(date +%s) - start ))s"
+          ls -R output/ | head -30
+
+      - name: MCP server handshake over stdio
+        run: |
+          cat > /tmp/mcp_smoke.py <<'PY'
+          import json, subprocess, sys, shutil
+
+          exe = shutil.which("docsift")
+          assert exe, "docsift not on PATH"
+          p = subprocess.Popen(
+              [exe, "mcp"],
+              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+              text=True, bufsize=1,
+          )
+
+          def send(msg):
+              p.stdin.write(json.dumps(msg) + "\n")
+              p.stdin.flush()
+
+          def read():
+              line = p.stdout.readline()
+              if not line:
+                  sys.exit("server closed stdout; stderr:\n" + p.stderr.read())
+              return json.loads(line)
+
+          send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+              "protocolVersion": "2024-11-05", "capabilities": {},
+              "clientInfo": {"name": "cleanroom", "version": "1"}}})
+          init = read()
+          print("initialize ->", json.dumps(init)[:400])
+          assert "result" in init, init
+
+          send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+          send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+          tools = read()
+          names = [t["name"] for t in tools["result"]["tools"]]
+          print("tools ->", names)
+          assert "convert_document" in names, names
+          assert "search_document" in names, names
+
+          p.terminate()
+          print("MCP handshake OK")
+          PY
+          timeout 120 python3 /tmp/mcp_smoke.py
+
+  pip-venv:
+    name: pip install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # README quickstart, verbatim.
+      - name: pip install "docsift[markitdown]"
+        run: |
+          python -m venv ~/cleanroom-venv
+          if [ -f ~/cleanroom-venv/bin/activate ]; then . ~/cleanroom-venv/bin/activate; else . ~/cleanroom-venv/Scripts/activate; fi
+          python -m pip install --upgrade pip
+          pip install "docsift[markitdown]"
+          docsift --version
+
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Convert without an engine installed for that type
+        run: |
+          if [ -f ~/cleanroom-venv/bin/activate ]; then . ~/cleanroom-venv/bin/activate; else . ~/cleanroom-venv/Scripts/activate; fi
+          cd "$GITHUB_WORKSPACE"
+          printf 'name,role\nada,engineer\ngrace,admiral\n' > sample.csv
+          docsift convert sample.csv
+          ls -R output/ | head -20
+
+      # README claims a bare install "will tell you so rather than failing
+      # obscurely". Check that promise holds.
+      - name: Bare install refuses PDFs with a useful message
+        run: |
+          python -m venv ~/bare-venv
+          if [ -f ~/bare-venv/bin/activate ]; then . ~/bare-venv/bin/activate; else . ~/bare-venv/Scripts/activate; fi
+          pip install docsift
+          cd "$GITHUB_WORKSPACE"
+          set +e
+          out=$(docsift convert src/tests/fixtures/sample.pdf 2>&1)
+          code=$?
+          set -e
+          echo "exit=$code"
+          echo "$out" | tail -20
+          echo "$out" | grep -iqE "install|extra|engine" || {
+            echo "::error::bare-install error message does not point at the fix"; exit 1; }
+
+  # The default install pulls the CUDA build of torch on Linux: 5.3 GB on disk,
+  # ~2.6 GB of it nvidia/triton wheels a CPU-only machine never touches. Does
+  # uv's CPU backend flag fix it, and does docling still work afterwards?
+  cpu-torch-linux:
+    name: CPU torch backend (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: astral-sh/setup-uv@v5
+
+      - name: uv tool install --torch-backend cpu
+        run: |
+          start=$(date +%s)
+          uv tool install --python 3.12 --torch-backend cpu \
+            "docsift[mcp,docling,markitdown]"
+          echo "::notice::cpu-backend install took $(( $(date +%s) - start ))s"
+
+      - name: Report install cost
+        run: |
+          du -sh ~/.local/share/uv/tools/docsift
+          echo "nvidia wheels present (want 0):"
+          ls ~/.local/share/uv/tools/docsift/lib/python3.12/site-packages/ \
+            | grep -ci nvidia || true
+
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Docling still converts
+        run: |
+          mkdir -p ~/cleanroom && cd ~/cleanroom
+          start=$(date +%s)
+          docsift convert "$GITHUB_WORKSPACE/src/tests/fixtures/multipage.pdf"
+          echo "::notice::cpu-backend convert took $(( $(date +%s) - start ))s"
+
+  python-minimum:
+    name: Stated minimum (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: astral-sh/setup-uv@v5
+      - name: uv tool install on 3.11
+        run: |
+          uv tool install --python 3.11 "docsift[mcp,markitdown]"
+          docsift --version
