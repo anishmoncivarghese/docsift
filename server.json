@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.anishmoncivarghese/docsift",
+  "description": "Convert a document once, then get back only the passages that answer a question.",
+  "version": "0.5.6",
+  "repository": {
+    "url": "https://github.com/anishmoncivarghese/docsift",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "docsift",
+      "version": "0.5.6",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "--from",
+          "valueHint": "--from"
+        },
+        {
+          "type": "positional",
+          "value": "docsift[mcp,docling,markitdown]",
+          "valueHint": "docsift[mcp,docling,markitdown]"
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "valueHint": "mcp"
+        }
+      ]
+    }
+  ]
+}

@@ -2,6 +2,10 @@
 
 > Convert documents once. Give agents only what they need.
 
+<!-- Ownership marker for the official MCP Registry; it verifies this line
+     against the README published on PyPI. Keep it. -->
+`mcp-name: io.github.anishmoncivarghese/docsift`
+
 A 300-page PDF does not fit in a language model's context window, and pasting it
 in would be expensive if it did. DocSift converts documents into clean Markdown
 once, indexes them, and then hands back only the passages that answer a

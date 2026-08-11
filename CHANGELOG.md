@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.6 — 2026-08-10
+
+- Listed in the **official MCP Registry**. Adds `server.json` (validated against
+  the published `2025-12-11` schema) and the `mcp-name:` ownership marker the
+  registry checks against the README published on PyPI — which is why this
+  needed a release rather than just a commit.
+
+  The listing installs with `uvx --from "docsift[mcp,docling,markitdown]"
+  docsift mcp`, so the extras come along; a bare `uvx docsift` would install the
+  CLI without an MCP SDK.
+
 ## 0.5.5 — 2026-08-10
 
 Documentation only; no code changes. Released so the page on PyPI matches the
