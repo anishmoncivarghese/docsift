@@ -29,3 +29,44 @@ jobs:
           [ "$version" = "$tag" ] || { echo "tag $tag != version $version"; exit 1; }
       - run: uv build
       - run: uv publish --trusted-publishing always
+
+  # Runs after PyPI, never beside it: the registry verifies the `mcp-name:`
+  # marker against the README of the *published* package, so publishing here
+  # before PyPI has the new version fails the ownership check.
+  registry:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # mcp-publisher authenticates with the OIDC token
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL -o publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz"
+          tar xzf publisher.tar.gz mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      # server.json names a PyPI version; it is worth nothing until that version
+      # is actually installable. A test already holds it to __version__.
+      - name: Wait for PyPI to serve this version
+        run: |
+          version=$(python3 -c "import json;print(json.load(open('server.json'))['version'])")
+          echo "waiting for docsift $version on PyPI"
+          for attempt in $(seq 1 30); do
+            if curl -sf "https://pypi.org/pypi/docsift/$version/json" > /dev/null; then
+              echo "available after $attempt attempt(s)"; exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::docsift $version never appeared on PyPI"; exit 1
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate
+
+      - name: Publish to the MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
