@@ -37,6 +37,19 @@ def split_by_slide(markdown: str) -> list[str]:
 
 
 _IMAGE_ONLY_LINE = re.compile(r"^!\[[^\]]*\]\([^)]*\)$", re.MULTILINE)
+# MarkItDown writes this header for every slide, whether or not there are notes.
+_EMPTY_NOTES_HEADER = re.compile(r"^#{1,6}\s*Notes:\s*$", re.MULTILINE)
+
+
+def _has_nothing_to_retrieve(text: str) -> bool:
+    """True for a slide whose only text is the notes header MarkItDown always adds.
+
+    An image-only slide reduces to that one line. Indexing it means a search for
+    "notes" returns blank slides, and the chunk reports a section path of
+    "Notes:" -- worse than not being there. A title-only slide is not affected;
+    a section divider is still worth finding.
+    """
+    return not _EMPTY_NOTES_HEADER.sub("", text).strip()
 
 
 def slide_chunks(markdown: str, options: ConversionOptions) -> list[Chunk]:
@@ -62,6 +75,8 @@ def slide_chunks(markdown: str, options: ConversionOptions) -> list[Chunk]:
         if options.clean.remove_image_refs:
             segment = _IMAGE_ONLY_LINE.sub("", segment)
         for chunk in chunk_markdown(segment, "slide", options.chunk):
+            if _has_nothing_to_retrieve(chunk.text):
+                continue
             chunks.append(chunk.model_copy(update={"chunk_id": f"c{len(chunks):03d}"}))
     return chunks
 

@@ -157,3 +157,43 @@ def test_a_leading_image_is_kept_when_the_user_asks_for_it():
     chunks = slide_chunks(markdown, ConversionOptions(clean=CleanOptions(remove_image_refs=False)))
 
     assert "![a picture](p.jpg)" in chunks[0].text
+
+
+def test_an_image_only_slide_produces_no_chunk():
+    """A slide whose only text is an empty Notes header has nothing to retrieve."""
+    from docsift.core.options import ConversionOptions
+    from docsift.engines.markitdown_engine import slide_chunks
+
+    markdown = (
+        "<!-- page: 1 -->\n# Real slide\nBody\n\n"
+        "<!-- page: 2 -->\n![just a photo](p.jpg)\n\n### Notes:\n\n"
+        "<!-- page: 3 -->\n# Another\nMore body\n"
+    )
+
+    chunks = slide_chunks(markdown, ConversionOptions())
+
+    assert [chunk.pages for chunk in chunks] == [[1], [3]]
+    assert [chunk.chunk_id for chunk in chunks] == ["c000", "c001"]
+
+
+def test_a_slide_with_real_speaker_notes_is_kept():
+    from docsift.core.options import ConversionOptions
+    from docsift.engines.markitdown_engine import slide_chunks
+
+    markdown = "<!-- page: 2 -->\n![photo](p.jpg)\n\n### Notes:\nEmphasise the APAC risk.\n"
+
+    chunks = slide_chunks(markdown, ConversionOptions())
+
+    assert len(chunks) == 1
+    assert "APAC" in chunks[0].text
+
+
+def test_a_title_only_slide_is_kept():
+    """A section divider is still worth finding."""
+    from docsift.core.options import ConversionOptions
+    from docsift.engines.markitdown_engine import slide_chunks
+
+    chunks = slide_chunks("<!-- page: 7 -->\n# Malibu sunset\n\n### Notes:\n", ConversionOptions())
+
+    assert len(chunks) == 1
+    assert chunks[0].pages == [7]
