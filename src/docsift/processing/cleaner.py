@@ -122,6 +122,11 @@ def _prepare(
     # dropped so adjacency still works with keep_page_markers=False.
     boundary_indices: set[int] = set()
     for line, fenced in marked:
+        if not fenced and not options.keep_page_markers and _PAGE_MARKER.match(line.strip()):
+            # An engine can supply these itself -- MarkItDown does, for slide
+            # boundaries. Honour the option regardless of who wrote the marker,
+            # or a deck would keep markers that a PDF drops.
+            continue
         if not fenced and line.strip() == PAGE_BREAK:
             page += 1
             boundary_indices.add(len(numbered))

@@ -385,3 +385,26 @@ def test_cleaned_document_attributes_first_page_content_to_page_one():
     chunks = chunk_markdown(cleaned, "doc_e2e", ChunkOptions(max_tokens=1000, overlap_tokens=0))
     assert chunks
     assert 1 in chunks[0].pages
+
+
+def test_engine_supplied_page_markers_are_dropped_when_not_wanted():
+    """A marker the engine put there must obey the same option as one we add."""
+    from docsift.core.options import CleanOptions
+    from docsift.processing.cleaner import clean_markdown
+
+    markdown = "<!-- page: 1 -->\n# One\n\n<!-- page: 2 -->\n# Two\n"
+    cleaned, _ = clean_markdown(markdown, CleanOptions(keep_page_markers=False))
+
+    assert "<!-- page:" not in cleaned
+    assert "# One" in cleaned
+    assert "# Two" in cleaned
+
+
+def test_engine_supplied_page_markers_are_kept_by_default():
+    from docsift.core.options import CleanOptions
+    from docsift.processing.cleaner import clean_markdown
+
+    markdown = "<!-- page: 1 -->\n# One\n"
+    cleaned, _ = clean_markdown(markdown, CleanOptions())
+
+    assert "<!-- page: 1 -->" in cleaned
