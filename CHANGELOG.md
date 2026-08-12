@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.7 — 2026-08-13
 
 - **PowerPoint answers can now be cited by slide.** A deck's chunks came back
   with no attribution at all — no slide number, no title, and MarkItDown's raw
