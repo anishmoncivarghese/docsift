@@ -3,8 +3,8 @@ from importlib import metadata, util
 from pathlib import Path
 
 from docsift.core.exceptions import ConversionFailedError
-from docsift.core.models import EngineOutput
-from docsift.core.options import ConversionOptions
+from docsift.core.models import Chunk, EngineOutput
+from docsift.core.options import ChunkOptions, ConversionOptions
 from docsift.core.progress import ProgressCallback, emit
 from docsift.engines.base import ConversionEngine
 
@@ -13,6 +13,45 @@ from docsift.engines.base import ConversionEngine
 # around `<!-- page: N -->`, so translate here, at the engine boundary, rather
 # than teaching those modules a second vendor's format.
 _SLIDE_MARKER = re.compile(r"^<!-- Slide number: (\d+) -->$", re.MULTILINE)
+
+
+_PAGE_MARKER_LINE = re.compile(r"^<!-- page: \d+ -->$", re.MULTILINE)
+
+
+def split_by_slide(markdown: str) -> list[str]:
+    """Cut normalised Markdown into one segment per slide, marker included.
+
+    Empty when there are no markers, which is how every non-presentation format
+    keeps the ordinary whole-document chunker.
+    """
+    starts = [match.start() for match in _PAGE_MARKER_LINE.finditer(markdown)]
+    if not starts:
+        return []
+    segments = [markdown[a:b] for a, b in zip(starts, starts[1:] + [len(markdown)], strict=True)]
+    preamble = markdown[: starts[0]].strip()
+    if preamble:
+        # Content before the first marker is rare, but dropping it would lose
+        # document text outright. It rides with the first slide.
+        segments[0] = f"{preamble}\n\n{segments[0]}"
+    return segments
+
+
+def slide_chunks(markdown: str, options: ChunkOptions) -> list[Chunk]:
+    """One chunk per slide, so an answer can name the slide it came from.
+
+    A slide is a semantic unit in a way a page is not -- nobody thinks in terms
+    of the second half of slide 14 -- and the token-budgeted chunker alone
+    packs dozens of sparse slides into one chunk, which cites as "slides 1-55"
+    and is no use to anyone. Each slide still goes through the ordinary chunker,
+    so a slide too big for the budget is split the usual way.
+    """
+    from docsift.processing.chunker import chunk_markdown
+
+    chunks: list[Chunk] = []
+    for segment in split_by_slide(markdown):
+        for chunk in chunk_markdown(segment, "slide", options):
+            chunks.append(chunk.model_copy(update={"chunk_id": f"c{len(chunks):03d}"}))
+    return chunks
 
 
 def normalize_slide_markers(markdown: str) -> tuple[str, int | None]:
@@ -62,9 +101,12 @@ class MarkItDownEngine(ConversionEngine):
                 f"markitdown failed on '{path.name}': {type(exc).__name__}"
             ) from exc
         markdown, page_count = normalize_slide_markers(result.text_content or "")
+        chunk_options = options.chunk if options else ChunkOptions()
+        chunks = slide_chunks(markdown, chunk_options) if page_count is not None else None
         return EngineOutput(
             markdown=markdown,
             title=getattr(result, "title", None),
             page_count=page_count,
+            chunks=chunks,
             engine_version=metadata.version("markitdown"),
         )
