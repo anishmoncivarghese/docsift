@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Says that Office support means the modern formats. "PowerPoint" in the
+  quickstart was unqualified, so a `.ppt` reader had no way to know until the
+  conversion refused it by name.
+
 ## 0.5.7 — 2026-08-13
 
 - **PowerPoint answers can now be cited by slide.** A deck's chunks came back

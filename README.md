@@ -36,6 +36,11 @@ That writes cleaned Markdown, token-budgeted chunks and a JSON summary to
 `./output/`. `pip install docsift` on its own installs the CLI but no engine, and
 conversion will tell you so rather than failing obscurely.
 
+**Office means the modern formats:** `.docx`, `.xlsx`, `.pptx`. The pre-2007
+binaries — `.doc`, `.xls`, `.ppt` — are not supported, and DocSift refuses them
+by name rather than failing halfway through. Open one in PowerPoint, Keynote,
+LibreOffice or Google Slides and save it as `.pptx` first.
+
 ## Use it from Claude, Codex, or another MCP client
 
 The shortest path to the point of this tool: let an assistant search your own
