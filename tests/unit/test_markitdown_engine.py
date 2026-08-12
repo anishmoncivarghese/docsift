@@ -128,3 +128,32 @@ def test_convert_sets_page_count_for_a_deck(tmp_path, monkeypatch):
 
     assert output.page_count == 2
     assert "<!-- page: 2 -->" in output.markdown
+
+
+def test_a_leading_image_does_not_swallow_the_slide_title():
+    """Real decks put the picture before the title; the title still wins."""
+    from docsift.core.options import ConversionOptions
+    from docsift.engines.markitdown_engine import slide_chunks
+
+    markdown = (
+        "<!-- page: 4 -->\n\n"
+        "![Sepia-toned image of a lifeguard stand](GoogleShape82p16.jpg)\n"
+        "# Long Beach\n6:28am\n"
+    )
+
+    chunks = slide_chunks(markdown, ConversionOptions())
+
+    assert len(chunks) == 1
+    assert chunks[0].pages == [4]
+    assert chunks[0].section_path == ["Long Beach"]
+
+
+def test_a_leading_image_is_kept_when_the_user_asks_for_it():
+    from docsift.core.options import CleanOptions, ConversionOptions
+    from docsift.engines.markitdown_engine import slide_chunks
+
+    markdown = "<!-- page: 1 -->\n![a picture](p.jpg)\n# Title\nBody\n"
+
+    chunks = slide_chunks(markdown, ConversionOptions(clean=CleanOptions(remove_image_refs=False)))
+
+    assert "![a picture](p.jpg)" in chunks[0].text

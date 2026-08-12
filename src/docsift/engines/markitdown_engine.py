@@ -4,7 +4,7 @@ from pathlib import Path
 
 from docsift.core.exceptions import ConversionFailedError
 from docsift.core.models import Chunk, EngineOutput
-from docsift.core.options import ChunkOptions, ConversionOptions
+from docsift.core.options import ConversionOptions
 from docsift.core.progress import ProgressCallback, emit
 from docsift.engines.base import ConversionEngine
 
@@ -36,7 +36,10 @@ def split_by_slide(markdown: str) -> list[str]:
     return segments
 
 
-def slide_chunks(markdown: str, options: ChunkOptions) -> list[Chunk]:
+_IMAGE_ONLY_LINE = re.compile(r"^!\[[^\]]*\]\([^)]*\)$", re.MULTILINE)
+
+
+def slide_chunks(markdown: str, options: ConversionOptions) -> list[Chunk]:
     """One chunk per slide, so an answer can name the slide it came from.
 
     A slide is a semantic unit in a way a page is not -- nobody thinks in terms
@@ -44,12 +47,21 @@ def slide_chunks(markdown: str, options: ChunkOptions) -> list[Chunk]:
     packs dozens of sparse slides into one chunk, which cites as "slides 1-55"
     and is no use to anyone. Each slide still goes through the ordinary chunker,
     so a slide too big for the budget is split the usual way.
+
+    Image references are dropped first, when the caller wants them gone. Real
+    decks put the picture above the title, and the chunker takes a chunk's
+    section path from its first non-heading block -- so a leading image, whose
+    heading path was captured before any heading existed, leaves every slide
+    reported as untitled. The document-level cleaner removes these too, but too
+    late: the chunk's metadata is already fixed by then.
     """
     from docsift.processing.chunker import chunk_markdown
 
     chunks: list[Chunk] = []
     for segment in split_by_slide(markdown):
-        for chunk in chunk_markdown(segment, "slide", options):
+        if options.clean.remove_image_refs:
+            segment = _IMAGE_ONLY_LINE.sub("", segment)
+        for chunk in chunk_markdown(segment, "slide", options.chunk):
             chunks.append(chunk.model_copy(update={"chunk_id": f"c{len(chunks):03d}"}))
     return chunks
 
@@ -101,8 +113,8 @@ class MarkItDownEngine(ConversionEngine):
                 f"markitdown failed on '{path.name}': {type(exc).__name__}"
             ) from exc
         markdown, page_count = normalize_slide_markers(result.text_content or "")
-        chunk_options = options.chunk if options else ChunkOptions()
-        chunks = slide_chunks(markdown, chunk_options) if page_count is not None else None
+        conversion_options = options or ConversionOptions()
+        chunks = slide_chunks(markdown, conversion_options) if page_count is not None else None
         return EngineOutput(
             markdown=markdown,
             title=getattr(result, "title", None),
