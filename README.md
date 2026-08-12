@@ -320,6 +320,17 @@ Markdown and chunk JSON DocSift writes are clean input for a vector store — a
 reasonable thing to want, and not what this tool does today. See
 [Known limitations](https://github.com/anishmoncivarghese/docsift/blob/main/docs/LIMITATIONS.md).
 
+**PowerPoint answers cite slide numbers.** A deck is chunked one slide at a
+time, so a passage comes back saying which slide it is from and what that slide
+was titled — the same way a PDF passage carries its page. The field is called
+`pages` for both; for a presentation it means slides. Speaker notes are
+extracted too, and are searchable.
+
+**What a deck will not give you: diagrams.** A slide with three boxes and two
+arrows extracts as three labels. The words survive, the relationships do not, so
+DocSift cannot tell you what an arrow between two boxes meant. Images inside
+slides are not read at all — text in a screenshot is invisible to search.
+
 Everything happens in that process, on your machine. Nothing listens on a port
 and no document content crosses the network. The server has exactly the
 filesystem access of the user who started it.

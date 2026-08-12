@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **PowerPoint answers can now be cited by slide.** A deck's chunks came back
+  with no attribution at all — no slide number, no title, and MarkItDown's raw
+  slide markers sitting in the chunk text — because the pipeline recognises
+  `<!-- page: N -->` and MarkItDown writes `<!-- Slide number: N -->`, so the
+  marker was never seen as one and fell through as ordinary paragraph text.
+
+  Translating it at the engine boundary fixed the attribution but not the
+  citation: slide content is sparse, so the token-budgeted chunker packed 55 of
+  a 60-slide deck into one chunk. Accurate, and no use to anyone. A deck is now
+  chunked one slide at a time, the same way Docling supplies its own chunks for
+  PDFs, so 60 slides yield 60 chunks each naming its slide and title. An
+  oversized slide still splits normally.
+
+  Speaker notes were already extracted and are searchable. Diagrams are not: a
+  slide with three boxes and two arrows gives three labels, and the arrows are
+  lost. Images inside slides are not read at all. Both are documented.
+
 ## 0.5.6 — 2026-08-10
 
 - Listed in the **official MCP Registry**. Adds `server.json` (validated against
